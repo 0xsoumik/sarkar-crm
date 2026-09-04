@@ -1,0 +1,215 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(0.985 0.004 240);
+  --foreground: oklch(0.18 0.02 240);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.02 240);
+  --primary: oklch(0.46 0.18 255);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0.01 240);
+  --secondary-foreground: oklch(0.28 0.03 240);
+  --muted: oklch(0.95 0.008 240);
+  --muted-foreground: oklch(0.48 0.02 240);
+  --accent: oklch(0.60 0.14 175);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.56 0.20 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.90 0.012 240);
+  --input: oklch(0.90 0.012 240);
+  --ring: oklch(0.46 0.18 255);
+  --chart-1: oklch(0.46 0.18 255);
+  --chart-2: oklch(0.60 0.14 175);
+  --chart-3: oklch(0.65 0.15 45);
+  --chart-4: oklch(0.55 0.16 290);
+  --chart-5: oklch(0.56 0.20 25);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.99 0.003 240);
+  --sidebar-foreground: oklch(0.18 0.02 240);
+  --sidebar-primary: oklch(0.46 0.18 255);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.95 0.01 240);
+  --sidebar-accent-foreground: oklch(0.28 0.03 240);
+  --sidebar-border: oklch(0.90 0.012 240);
+  --sidebar-ring: oklch(0.46 0.18 255);
+}
+
+.dark {
+  --background: oklch(0.14 0.015 250);
+  --foreground: oklch(0.95 0.005 240);
+  --card: oklch(0.18 0.015 250);
+  --card-foreground: oklch(0.95 0.005 240);
+  --popover: oklch(0.18 0.015 250);
+  --popover-foreground: oklch(0.95 0.005 240);
+  --primary: oklch(0.62 0.19 250);
+  --primary-foreground: oklch(0.12 0.02 250);
+  --secondary: oklch(0.22 0.015 250);
+  --secondary-foreground: oklch(0.92 0.005 240);
+  --muted: oklch(0.22 0.015 250);
+  --muted-foreground: oklch(0.62 0.02 240);
+  --accent: oklch(0.64 0.16 175);
+  --accent-foreground: oklch(0.12 0.02 250);
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.26 0.015 250);
+  --input: oklch(0.26 0.015 250);
+  --ring: oklch(0.62 0.19 250);
+  --chart-1: oklch(0.62 0.19 250);
+  --chart-2: oklch(0.64 0.16 175);
+  --chart-3: oklch(0.70 0.16 45);
+  --chart-4: oklch(0.65 0.16 290);
+  --chart-5: oklch(0.58 0.22 25);
+  --sidebar: oklch(0.16 0.015 250);
+  --sidebar-foreground: oklch(0.95 0.005 240);
+  --sidebar-primary: oklch(0.62 0.19 250);
+  --sidebar-primary-foreground: oklch(0.12 0.02 250);
+  --sidebar-accent: oklch(0.22 0.015 250);
+  --sidebar-accent-foreground: oklch(0.92 0.005 240);
+  --sidebar-border: oklch(0.26 0.015 250);
+  --sidebar-ring: oklch(0.62 0.19 250);
+}
+
+@theme inline {
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    background: var(--background);
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  button, input, textarea, select {
+    font: inherit;
+  }
+}
+
+/* Custom Executive Styling Utilities */
+[data-slot="card"], .card-elevated {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease-in-out;
+}
+
+.card-elevated:hover {
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+}
+
+/* High-Density Compact Layout Mode for non-daily-sheet tabs */
+.compact-workspace {
+  font-size: 0.75rem;
+}
+
+.compact-workspace [data-slot="card"] {
+  padding: 0.625rem !important;
+  border-radius: 0.5rem !important;
+}
+
+.compact-workspace input,
+.compact-workspace select {
+  height: 1.875rem !important;
+  font-size: 0.725rem !important;
+  padding-top: 0.2rem !important;
+  padding-bottom: 0.2rem !important;
+  border-radius: 0.375rem !important;
+}
+
+.compact-workspace button:not(.btn-no-compact) {
+  height: 1.75rem !important;
+  font-size: 0.7rem !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  border-radius: 0.375rem !important;
+}
+
+.compact-workspace table th,
+.compact-workspace table td {
+  padding-top: 0.3rem !important;
+  padding-bottom: 0.3rem !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  font-size: 0.7rem !important;
+}
+
+.compact-workspace h2 {
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+}
+
+.compact-workspace h3,
+.compact-workspace h4 {
+  font-size: 0.775rem !important;
+  line-height: 1.1rem !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+button {
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--primary) 22%, transparent);
+}
+
+
