@@ -1,4 +1,4 @@
-﻿import { supabase, isSupabaseConfigured } from "./supabase"
+import { supabase, isSupabaseConfigured } from "./supabase"
 
 export async function fetchCloudState(): Promise<Record<string, any> | null> {
   if (!isSupabaseConfigured || !supabase) return null
@@ -25,11 +25,60 @@ export async function fetchCloudState(): Promise<Record<string, any> | null> {
 export async function saveCloudStateKey(key: string, value: any): Promise<boolean> {
   if (!isSupabaseConfigured || !supabase) return false
   try {
+    let payloadToSave = value
+
+    // CRITICAL DATA PROTECTION: If saving sarkar_builders_data, merge with cloud to prevent overwrites
+    if (key === "sarkar_builders_data" && value && Array.isArray(value.orders)) {
+      try {
+        const { data: existingRow } = await supabase
+          .from("sarkar_state")
+          .select("data")
+          .eq("key", "sarkar_builders_data")
+          .maybeSingle()
+
+        if (existingRow?.data?.orders && Array.isArray(existingRow.data.orders)) {
+          const existingOrders = existingRow.data.orders
+          // Merge by ID: existing cloud orders are never lost
+          const orderMap = new Map<string, any>()
+          for (const o of existingOrders) {
+            if (o && o.id) orderMap.set(o.id, o)
+          }
+          for (const o of value.orders) {
+            if (o && o.id) {
+              const prev = orderMap.get(o.id)
+              orderMap.set(o.id, prev ? { ...prev, ...o } : o)
+            }
+          }
+          payloadToSave = {
+            ...value,
+            orders: Array.from(orderMap.values()),
+          }
+
+          // Also merge payments
+          if (existingRow.data.payments && Array.isArray(existingRow.data.payments)) {
+            const payMap = new Map<string, any>()
+            for (const p of existingRow.data.payments) {
+              if (p && p.id) payMap.set(p.id, p)
+            }
+            for (const p of (value.payments || [])) {
+              if (p && p.id) {
+                const prev = payMap.get(p.id)
+                payMap.set(p.id, prev ? { ...prev, ...p } : p)
+              }
+            }
+            payloadToSave.payments = Array.from(payMap.values())
+          }
+        }
+      } catch (mergeErr) {
+        console.warn("[CloudSync] Non-blocking merge error:", mergeErr)
+      }
+    }
+
     const { error } = await supabase
       .from("sarkar_state")
       .upsert({
         key,
-        data: value,
+        data: payloadToSave,
         updated_at: new Date().toISOString(),
       }, { onConflict: "key" })
     if (error) {
