@@ -368,12 +368,20 @@ export function useStore() {
         nextSlipNo = normalizedCounters.nextSlipNo
       } catch (e) {
         console.error("[v0] Failed to load saved data:", e)
+        // If Supabase is configured, start empty — cloud will hydrate.
+        // Only use INITIAL_ORDERS on a fresh local-only setup.
+        if (!isSupabaseConfigured) {
+          setOrders(INITIAL_ORDERS)
+          setVans(INITIAL_VANS)
+        }
+      }
+    } else {
+      // No localStorage data — if cloud is configured, cloud hydration will populate state.
+      // Don't load demo data into a cloud-connected app.
+      if (!isSupabaseConfigured) {
         setOrders(INITIAL_ORDERS)
         setVans(INITIAL_VANS)
       }
-    } else {
-      setOrders(INITIAL_ORDERS)
-      setVans(INITIAL_VANS)
     }
 
     // Counters are rebuilt from persisted records above, so stale legacy values cannot reappear.
