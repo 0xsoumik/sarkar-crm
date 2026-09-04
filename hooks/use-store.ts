@@ -15,6 +15,10 @@ function isWriteLocked() {
   return Date.now() < localWriteLockUntil
 }
 
+// Module-level cloud hydration flag: blocks Supabase writes until cloud data has been loaded
+// This prevents the save effect from overwriting cloud data with stale localStorage on initial mount
+let cloudFullyHydrated = false
+
 // Helper: capitalize names and addresses properly
 function capitalizeProper(text: string): string {
   if (!text) return ""
@@ -380,7 +384,10 @@ export function useStore() {
     if (isSupabaseConfigured) {
       console.log("[v0] Supabase configured - connecting cloud state...")
       fetchCloudState().then((cloudData) => {
-        if (!cloudData) return
+        if (!cloudData) {
+          cloudFullyHydrated = true
+          return
+        }
         if (cloudData.sarkar_builders_data && Array.isArray(cloudData.sarkar_builders_data.orders) && cloudData.sarkar_builders_data.orders.length > 0) {
           console.log("[v0] Cloud data found - syncing into local store...")
           const unpacked = unpackOrdersData(cloudData.sarkar_builders_data)
@@ -413,6 +420,7 @@ export function useStore() {
             localStorage.setItem("sarkar_builders_data", JSON.stringify(cloudData.sarkar_builders_data))
           } catch {}
           setIsCloudSynced(true)
+          cloudFullyHydrated = true
         } else {
           // Cloud database is empty! Auto-upload current local data to Supabase
           console.log("[v0] Cloud database is empty - uploading local data to Supabase...")
@@ -431,6 +439,7 @@ export function useStore() {
             try { saveCloudStateKey("sarkar_builders_counters", JSON.parse(currentLocalCounters)) } catch {}
           }
           setIsCloudSynced(true)
+          cloudFullyHydrated = true
         }
       })
 
@@ -488,7 +497,7 @@ export function useStore() {
     } catch (e) {
       console.error("[v0] Failed to save data:", e)
     }
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && cloudFullyHydrated) {
       acquireWriteLock(3000)
       saveCloudStateKey("sarkar_builders_data", dataToSave)
     }
