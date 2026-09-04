@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect } from "react"
 import type { Order, OrderItem, Van, Worker, Trip, Payment, PaymentOut, DeleteLog, ActivityLog, Customer, SKUItem } from "@/lib/types"
 import { getISTDateString } from "@/lib/validation"
+import { isSupabaseConfigured } from "@/lib/supabase"
+import { fetchCloudState, saveCloudStateKey, subscribeToCloudChanges } from "@/lib/supabase-sync"
 
 // Helper: capitalize names and addresses properly
 function capitalizeProper(text: string): string {
@@ -139,6 +141,76 @@ const INITIAL_ORDERS: Order[] = [
   makeOrder({ id: "o6", name: "Sadananda Biswas", address: "Dashara", product: "5/8 Stone", billNo: "B-1387", vanIds: ["v3", "v4"] }, 6),
 ]
 
+function unpackOrdersData(parsed: any) {
+  const rawOrders = Array.isArray(parsed?.orders) ? parsed.orders : INITIAL_ORDERS
+  const loadedOrders: Order[] = rawOrders.map((o: any, idx: number) => ({
+    id: o.id || `o${idx + 1}`,
+    orderNo: (typeof o.orderNo === "number" && o.orderNo > 0) ? o.orderNo : (Number(o.orderNo) > 0 ? Number(o.orderNo) : idx + 1),
+    name: o.name || "Customer",
+    phone: o.phone || "",
+    address: o.address || "",
+    product: o.product || "Material",
+    originalProduct: o.originalProduct || o.product || "Material",
+    billNo: o.billNo || "",
+    originalBillNo: o.originalBillNo || o.billNo || "",
+    unit: o.unit || "bags",
+    originalUnit: o.originalUnit || o.unit || "bags",
+    totalQty: typeof o.totalQty === "number" ? o.totalQty : 0,
+    originalTotalQty: typeof o.originalTotalQty === "number" ? o.originalTotalQty : (typeof o.totalQty === "number" ? o.totalQty : 0),
+    rate: typeof o.rate === "number" ? o.rate : undefined,
+    isUnpriced: typeof o.rate !== "number" || o.rate === 0 || Boolean(o.isUnpriced),
+    vanIds: Array.isArray(o.vanIds) ? o.vanIds : [],
+    priority: typeof o.priority === "number" ? o.priority : 0,
+    deleted: Boolean(o.deleted),
+    trips: Array.isArray(o.trips) ? o.trips : [],
+    payments: Array.isArray(o.payments) ? o.payments : [],
+    createdAt: o.createdAt || new Date().toISOString(),
+    items: Array.isArray(o.items) ? o.items : undefined,
+  }))
+
+  const rawPayments = Array.isArray(parsed?.payments) ? parsed.payments : []
+  const loadedPayments: Payment[] = rawPayments.map((p: any, idx: number) => ({
+    id: p.id || `p${idx + 1}`,
+    receiptNo: typeof p.receiptNo === "number" ? p.receiptNo : idx + 1,
+    name: p.name || "Customer",
+    phone: p.phone || "",
+    address: p.address || "",
+    amount: typeof p.amount === "number" ? p.amount : (Number(p.amount) || 0),
+    mode: p.mode || "CASH",
+    note: p.note || "",
+    createdAt: p.createdAt || new Date().toISOString(),
+    deleted: Boolean(p.deleted),
+    deletedAt: p.deletedAt,
+    deleteReason: p.deleteReason,
+  }))
+
+  const rawPaymentsOut = Array.isArray(parsed?.paymentsOut) ? parsed.paymentsOut : []
+  const loadedPaymentsOut: PaymentOut[] = rawPaymentsOut.map((po: any, idx: number) => ({
+    id: po.id || `po${idx + 1}`,
+    voucherNo: typeof po.voucherNo === "number" ? po.voucherNo : idx + 1,
+    supplierName: po.supplierName || "Supplier",
+    truckNo: po.truckNo || "",
+    material: po.material || "",
+    amount: typeof po.amount === "number" ? po.amount : (Number(po.amount) || 0),
+    mode: po.mode || "CASH",
+    note: po.note || "",
+    createdAt: po.createdAt || new Date().toISOString(),
+  }))
+
+  const loadedVans = Array.isArray(parsed?.vans) && parsed.vans.length > 0 ? parsed.vans : INITIAL_VANS
+  const loadedDeleteLogs = Array.isArray(parsed?.deleteLogs) ? parsed.deleteLogs : []
+  const loadedActivityLogs = Array.isArray(parsed?.activityLogs) ? parsed.activityLogs : []
+
+  return {
+    loadedOrders,
+    loadedPayments,
+    loadedPaymentsOut,
+    loadedVans,
+    loadedDeleteLogs,
+    loadedActivityLogs,
+  }
+}
+
 export function useStore() {
   // Initialize with empty state - will be hydrated from localStorage
   const [orders, setOrders] = useState<Order[]>([])
@@ -153,6 +225,7 @@ export function useStore() {
   const [counters, setCounters] = useState({ nextOrderNo: 1, nextReceiptNo: 1, nextVoucherNo: 1, nextSlipNo: 1 })
   const [hydrated, setHydrated] = useState(false)
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false)
+  const [isCloudSynced, setIsCloudSynced] = useState(isSupabaseConfigured)
 
   // Load from localStorage on mount - only run once
   useEffect(() => {
@@ -293,6 +366,87 @@ export function useStore() {
     // Counters are rebuilt from persisted records above, so stale legacy values cannot reappear.
     void savedCounters
     setHydrated(true)
+
+    // Background Cloud Sync with Supabase (Multi-device / Real-time)
+    if (isSupabaseConfigured) {
+      console.log("[v0] Supabase configured - connecting cloud state...")
+      fetchCloudState().then((cloudData) => {
+        if (!cloudData) return
+        if (cloudData.sarkar_builders_data && Array.isArray(cloudData.sarkar_builders_data.orders) && cloudData.sarkar_builders_data.orders.length > 0) {
+          console.log("[v0] Cloud data found - syncing into local store...")
+          const unpacked = unpackOrdersData(cloudData.sarkar_builders_data)
+          setOrders(unpacked.loadedOrders)
+          setVans(unpacked.loadedVans)
+          setPayments(unpacked.loadedPayments)
+          setPaymentsOut(unpacked.loadedPaymentsOut)
+          setDeleteLogs(unpacked.loadedDeleteLogs)
+          setActivityLogs(unpacked.loadedActivityLogs)
+
+          if (Array.isArray(cloudData.sarkar_builders_skus) && cloudData.sarkar_builders_skus.length > 0) {
+            setSkuList(cloudData.sarkar_builders_skus)
+            try { localStorage.setItem("sarkar_builders_skus", JSON.stringify(cloudData.sarkar_builders_skus)) } catch {}
+          }
+          if (Array.isArray(cloudData.sarkar_builders_rate_edit_logs)) {
+            setRateEditLogs(cloudData.sarkar_builders_rate_edit_logs)
+            try { localStorage.setItem("sarkar_builders_rate_edit_logs", JSON.stringify(cloudData.sarkar_builders_rate_edit_logs)) } catch {}
+          }
+          if (cloudData.sarkar_builders_counters) {
+            setCounters(cloudData.sarkar_builders_counters)
+            try { localStorage.setItem("sarkar_builders_counters", JSON.stringify(cloudData.sarkar_builders_counters)) } catch {}
+          }
+          try {
+            localStorage.setItem("sarkar_builders_data", JSON.stringify(cloudData.sarkar_builders_data))
+          } catch {}
+          setIsCloudSynced(true)
+        } else {
+          // Cloud database is empty! Auto-upload current local data to Supabase
+          console.log("[v0] Cloud database is empty - uploading local data to Supabase...")
+          const currentLocalData = localStorage.getItem("sarkar_builders_data")
+          if (currentLocalData) {
+            try {
+              saveCloudStateKey("sarkar_builders_data", JSON.parse(currentLocalData))
+            } catch {}
+          }
+          const currentLocalSKUs = localStorage.getItem("sarkar_builders_skus")
+          if (currentLocalSKUs) {
+            try { saveCloudStateKey("sarkar_builders_skus", JSON.parse(currentLocalSKUs)) } catch {}
+          }
+          const currentLocalCounters = localStorage.getItem("sarkar_builders_counters")
+          if (currentLocalCounters) {
+            try { saveCloudStateKey("sarkar_builders_counters", JSON.parse(currentLocalCounters)) } catch {}
+          }
+          setIsCloudSynced(true)
+        }
+      })
+
+      // Realtime subscription: sync when changes happen on another device
+      const unsub = subscribeToCloudChanges((key, data) => {
+        if (key === "sarkar_builders_data" && data && Array.isArray(data.orders)) {
+          console.log("[v0] Realtime cloud update received for orders/data")
+          const unpacked = unpackOrdersData(data)
+          setOrders(unpacked.loadedOrders)
+          setVans(unpacked.loadedVans)
+          setPayments(unpacked.loadedPayments)
+          setPaymentsOut(unpacked.loadedPaymentsOut)
+          setDeleteLogs(unpacked.loadedDeleteLogs)
+          setActivityLogs(unpacked.loadedActivityLogs)
+          try { localStorage.setItem("sarkar_builders_data", JSON.stringify(data)) } catch {}
+        } else if (key === "sarkar_builders_skus" && Array.isArray(data)) {
+          setSkuList(data)
+          try { localStorage.setItem("sarkar_builders_skus", JSON.stringify(data)) } catch {}
+        } else if (key === "sarkar_builders_counters" && data) {
+          setCounters(data)
+          try { localStorage.setItem("sarkar_builders_counters", JSON.stringify(data)) } catch {}
+        } else if (key === "sarkar_builders_rate_edit_logs" && Array.isArray(data)) {
+          setRateEditLogs(data)
+          try { localStorage.setItem("sarkar_builders_rate_edit_logs", JSON.stringify(data)) } catch {}
+        }
+      })
+
+      return () => {
+        unsub()
+      }
+    }
   }, [])
 
   // Save to localStorage whenever data changes (but only after hydration)
@@ -314,6 +468,9 @@ export function useStore() {
     } catch (e) {
       console.error("[v0] Failed to save data:", e)
     }
+    if (isSupabaseConfigured) {
+      saveCloudStateKey("sarkar_builders_data", dataToSave)
+    }
   }, [orders, vans, payments, paymentsOut, deleteLogs, activityLogs, hydrated])
 
   // Save counters whenever they change - always keep them in sync
@@ -329,6 +486,9 @@ export function useStore() {
       nextSlipNo = counters.nextSlipNo
     } catch (e) {
       console.error("[v0] Failed to save counters:", e)
+    }
+    if (isSupabaseConfigured) {
+      saveCloudStateKey("sarkar_builders_counters", counters)
     }
   }, [counters, hydrated])
 
@@ -808,6 +968,9 @@ export function useStore() {
         }]
       }
       localStorage.setItem("sarkar_builders_skus", JSON.stringify(updated))
+      if (isSupabaseConfigured) {
+        saveCloudStateKey("sarkar_builders_skus", updated)
+      }
       return updated
     })
   }, [])
@@ -826,6 +989,9 @@ export function useStore() {
     setRateEditLogs(prev => {
       const updated = [newEntry, ...prev]
       localStorage.setItem("sarkar_builders_rate_edit_logs", JSON.stringify(updated))
+      if (isSupabaseConfigured) {
+        saveCloudStateKey("sarkar_builders_rate_edit_logs", updated)
+      }
       return updated
     })
   }, [])
@@ -858,6 +1024,9 @@ export function useStore() {
       const newItem: SKUItem = { ...sku, id: `sku_${Date.now()}` }
       const updated = [...prev, newItem]
       localStorage.setItem("sarkar_builders_skus", JSON.stringify(updated))
+      if (isSupabaseConfigured) {
+        saveCloudStateKey("sarkar_builders_skus", updated)
+      }
       return updated
     })
   }, [])
@@ -866,6 +1035,9 @@ export function useStore() {
     setSkuList(prev => {
       const updated = prev.map(s => s.id === id ? { ...s, ...fields } : s)
       localStorage.setItem("sarkar_builders_skus", JSON.stringify(updated))
+      if (isSupabaseConfigured) {
+        saveCloudStateKey("sarkar_builders_skus", updated)
+      }
       return updated
     })
   }, [])
@@ -874,6 +1046,9 @@ export function useStore() {
     setSkuList(prev => {
       const updated = prev.filter(s => s.id !== id)
       localStorage.setItem("sarkar_builders_skus", JSON.stringify(updated))
+      if (isSupabaseConfigured) {
+        saveCloudStateKey("sarkar_builders_skus", updated)
+      }
       return updated
     })
   }, [])
@@ -890,6 +1065,27 @@ export function useStore() {
     // Bidirectional sync with SKU
     if (newRate > 0) updateSKURate(order.product, newRate)
   }, [orders, logRateEdit, updateSKURate])
+
+  const forcePushToCloud = useCallback(async () => {
+    if (!isSupabaseConfigured) return false
+    const dataToSave = {
+      schemaVersion: 2,
+      savedAt: new Date().toISOString(),
+      orders,
+      vans,
+      payments,
+      paymentsOut,
+      deleteLogs,
+      activityLogs,
+    }
+    const s1 = await saveCloudStateKey("sarkar_builders_data", dataToSave)
+    const s2 = await saveCloudStateKey("sarkar_builders_counters", counters)
+    const s3 = await saveCloudStateKey("sarkar_builders_skus", skuList)
+    const s4 = await saveCloudStateKey("sarkar_builders_rate_edit_logs", rateEditLogs)
+    const allOk = Boolean(s1 && s2 && s3 && s4)
+    setIsCloudSynced(allOk)
+    return allOk
+  }, [orders, vans, payments, paymentsOut, deleteLogs, activityLogs, counters, skuList, rateEditLogs])
 
   return {
     orders,
@@ -939,6 +1135,8 @@ export function useStore() {
     logActivity,
     searchCustomer,
     getCustomerProfile,
+    isCloudSynced,
+    forcePushToCloud,
   }
 }
 

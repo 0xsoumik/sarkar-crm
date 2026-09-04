@@ -42,6 +42,7 @@ import {
   PanelLeftOpen,
   ArrowDown,
   ArrowUp,
+  Cloud,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -290,9 +291,13 @@ export default function Page() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight text-foreground">Sarkar Operations CRM</h1>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Local Sync
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                  store.isCloudSynced
+                    ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
+                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${store.isCloudSynced ? "bg-sky-500" : "bg-emerald-500"}`} />
+                  {store.isCloudSynced ? "Live Cloud Sync (Supabase)" : "Live Local Sync"}
                 </span>
                 {store.isAdminUnlocked ? (
                   <button
