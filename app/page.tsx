@@ -252,9 +252,9 @@ export default function Page() {
   }
 
   const filteredOrders = store.orders.filter((o) => {
+    if (activeFilterTab === "pending") return o.status === "pending" && !o.deleted
     const orderDate = o.createdAt ? getISTDateString(o.createdAt) : ""
     if (orderDate !== selectedDate) return false
-    if (activeFilterTab === "pending") return o.status === "pending" && !o.deleted
     if (activeFilterTab === "delivered") return o.status === "delivered" && !o.deleted
     return !o.deleted
   })
