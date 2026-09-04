@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
@@ -6,10 +6,22 @@ import './globals.css'
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#1a1a2e',
+}
+
 export const metadata: Metadata = {
-  title: 'Outstanding Orders Tracker',
+  title: 'Sarkar CRM',
   description: 'Track outstanding construction material delivery orders with van assignments, quality checks, and trip-based billing',
   generator: 'v0.app',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Sarkar CRM',
+  },
   icons: {
     icon: [
       {
