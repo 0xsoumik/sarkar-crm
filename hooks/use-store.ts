@@ -1,10 +1,19 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import type { Order, OrderItem, Van, Worker, Trip, Payment, PaymentOut, DeleteLog, ActivityLog, Customer, SKUItem } from "@/lib/types"
 import { getISTDateString } from "@/lib/validation"
 import { isSupabaseConfigured } from "@/lib/supabase"
 import { fetchCloudState, saveCloudStateKey, subscribeToCloudChanges } from "@/lib/supabase-sync"
+
+// Module-level write lock: prevents realtime subscription from overwriting local writes in-flight
+let localWriteLockUntil = 0
+function acquireWriteLock(ms = 3000) {
+  localWriteLockUntil = Date.now() + ms
+}
+function isWriteLocked() {
+  return Date.now() < localWriteLockUntil
+}
 
 // Helper: capitalize names and addresses properly
 function capitalizeProper(text: string): string {
@@ -391,8 +400,14 @@ export function useStore() {
             try { localStorage.setItem("sarkar_builders_rate_edit_logs", JSON.stringify(cloudData.sarkar_builders_rate_edit_logs)) } catch {}
           }
           if (cloudData.sarkar_builders_counters) {
-            setCounters(cloudData.sarkar_builders_counters)
-            try { localStorage.setItem("sarkar_builders_counters", JSON.stringify(cloudData.sarkar_builders_counters)) } catch {}
+            const cc = cloudData.sarkar_builders_counters
+            setCounters(cc)
+            // Also sync module-level counters so addOrder picks up the right values immediately
+            nextOrderNo = cc.nextOrderNo ?? nextOrderNo
+            nextReceiptNo = cc.nextReceiptNo ?? nextReceiptNo
+            nextVoucherNo = cc.nextVoucherNo ?? nextVoucherNo
+            nextSlipNo = cc.nextSlipNo ?? nextSlipNo
+            try { localStorage.setItem("sarkar_builders_counters", JSON.stringify(cc)) } catch {}
           }
           try {
             localStorage.setItem("sarkar_builders_data", JSON.stringify(cloudData.sarkar_builders_data))
@@ -421,6 +436,11 @@ export function useStore() {
 
       // Realtime subscription: sync when changes happen on another device
       const unsub = subscribeToCloudChanges((key, data) => {
+        // Ignore realtime events that are echoes of our own local writes
+        if (isWriteLocked()) {
+          console.log("[v0] Realtime update ignored (local write in progress):", key)
+          return
+        }
         if (key === "sarkar_builders_data" && data && Array.isArray(data.orders)) {
           console.log("[v0] Realtime cloud update received for orders/data")
           const unpacked = unpackOrdersData(data)
@@ -469,6 +489,7 @@ export function useStore() {
       console.error("[v0] Failed to save data:", e)
     }
     if (isSupabaseConfigured) {
+      acquireWriteLock(3000)
       saveCloudStateKey("sarkar_builders_data", dataToSave)
     }
   }, [orders, vans, payments, paymentsOut, deleteLogs, activityLogs, hydrated])
