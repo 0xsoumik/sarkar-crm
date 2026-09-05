@@ -573,7 +573,7 @@ export default function Page() {
                   {/* Van Registry */}
                   {showVans && (
                     <div className="mb-4">
-                      <VanRegistry vans={store.vans} orders={store.orders} onAddVan={store.addVan} onToggleVan={store.toggleVan} onDeleteVan={store.deleteVan} />
+                      <VanRegistry vans={store.vans} orders={store.orders} onAddVan={store.addVan} onToggleVan={store.toggleVan} onUpdateVan={store.updateVan} onDeleteVan={store.deleteVan} />
                     </div>
                   )}
 

@@ -5,6 +5,8 @@ export interface Van {
   plate: string
   color?: string
   enabled: boolean
+  capacity?: number
+  capacityUnit?: string
 }
 
 export interface Trip {

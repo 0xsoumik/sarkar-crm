@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import type { Van, Order } from "@/lib/types"
-import { Truck, Plus, Power, Package, Trash2, X } from "lucide-react"
+import { Truck, Plus, Power, Package, Trash2, X, Pencil, Gauge } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -19,6 +19,7 @@ interface VanRegistryProps {
   orders: Order[]
   onAddVan: (van: Omit<Van, "id" | "enabled">) => void
   onToggleVan: (id: string) => void
+  onUpdateVan?: (id: string, updates: Partial<Van>) => void
   onDeleteVan: (id: string) => void
 }
 
@@ -31,15 +32,19 @@ interface ContextMenu {
 
 const VAN_COLORS = ["#e67e22", "#2ecc71", "#3498db", "#e74c3c", "#9b59b6", "#1abc9c", "#f1c40f", "#34495e"]
 
-export function VanRegistry({ vans, orders, onAddVan, onToggleVan, onDeleteVan }: VanRegistryProps) {
+export function VanRegistry({ vans, orders, onAddVan, onToggleVan, onUpdateVan, onDeleteVan }: VanRegistryProps) {
   const pendingOrders = orders.filter((o) => o.status === "pending")
   const [open, setOpen] = useState(() => {
     if (typeof window === "undefined") return true
     return localStorage.getItem("sarkar_builders_vans_dialog_open") === "true"
   })
-  const [form, setForm] = useState({ name: "", driver: "", plate: "", color: VAN_COLORS[0] })
+  const [form, setForm] = useState({ name: "", driver: "", plate: "", color: VAN_COLORS[0], capacity: "", capacityUnit: "bags" })
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [editingVan, setEditingVan] = useState<Van | null>(null)
+  const [editForm, setEditForm] = useState({ name: "", driver: "", plate: "", color: VAN_COLORS[0], capacity: "", capacityUnit: "bags" })
+  const [capacityModalVan, setCapacityModalVan] = useState<Van | null>(null)
+  const [capacityForm, setCapacityForm] = useState({ capacity: "", capacityUnit: "bags" })
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -49,9 +54,63 @@ export function VanRegistry({ vans, orders, onAddVan, onToggleVan, onDeleteVan }
 
   const handleAdd = () => {
     if (!form.name.trim() || !form.driver.trim()) return
-    onAddVan(form)
-    setForm({ name: "", driver: "", plate: "", color: VAN_COLORS[0] })
+    const cap = form.capacity.trim() !== "" ? Number(form.capacity) : undefined
+    onAddVan({
+      name: form.name.trim(),
+      driver: form.driver.trim(),
+      plate: form.plate.trim(),
+      color: form.color,
+      capacity: cap && !isNaN(cap) && cap > 0 ? cap : undefined,
+      capacityUnit: form.capacityUnit || "bags",
+    })
+    setForm({ name: "", driver: "", plate: "", color: VAN_COLORS[0], capacity: "", capacityUnit: "bags" })
     setOpen(false)
+  }
+
+  const handleStartEdit = (van: Van) => {
+    setEditingVan(van)
+    setEditForm({
+      name: van.name,
+      driver: van.driver,
+      plate: van.plate,
+      color: van.color || VAN_COLORS[0],
+      capacity: van.capacity !== undefined ? String(van.capacity) : "",
+      capacityUnit: van.capacityUnit || "bags",
+    })
+    setContextMenu(null)
+  }
+
+  const handleSaveEdit = () => {
+    if (!editingVan || !onUpdateVan) return
+    const cap = editForm.capacity.trim() !== "" ? Number(editForm.capacity) : undefined
+    onUpdateVan(editingVan.id, {
+      name: editForm.name.trim() || editingVan.name,
+      driver: editForm.driver.trim() || editingVan.driver,
+      plate: editForm.plate.trim() || editingVan.plate,
+      color: editForm.color,
+      capacity: cap && !isNaN(cap) && cap > 0 ? cap : undefined,
+      capacityUnit: editForm.capacityUnit || "bags",
+    })
+    setEditingVan(null)
+  }
+
+  const handleOpenCapacityModal = (van: Van) => {
+    setCapacityModalVan(van)
+    setCapacityForm({
+      capacity: van.capacity !== undefined ? String(van.capacity) : "",
+      capacityUnit: van.capacityUnit || "bags",
+    })
+    setContextMenu(null)
+  }
+
+  const handleSaveCapacity = () => {
+    if (!capacityModalVan || !onUpdateVan) return
+    const cap = capacityForm.capacity.trim() !== "" ? Number(capacityForm.capacity) : undefined
+    onUpdateVan(capacityModalVan.id, {
+      capacity: cap && !isNaN(cap) && cap > 0 ? cap : undefined,
+      capacityUnit: capacityForm.capacityUnit || "bags",
+    })
+    setCapacityModalVan(null)
   }
 
   // Right-click handler on van card
@@ -146,6 +205,27 @@ export function VanRegistry({ vans, orders, onAddVan, onToggleVan, onDeleteVan }
                     className="mt-1 text-xs"
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs font-medium">Fleet Capacity</Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 50"
+                      value={form.capacity}
+                      onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
+                      className="mt-1 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium">Capacity Unit</Label>
+                    <Input
+                      placeholder="e.g. bags / pcs"
+                      value={form.capacityUnit}
+                      onChange={(e) => setForm((f) => ({ ...f, capacityUnit: e.target.value }))}
+                      className="mt-1 text-xs"
+                    />
+                  </div>
+                </div>
                 <div>
                   <Label className="text-xs font-medium">Color Badge Tag</Label>
                   <div className="mt-1.5 flex gap-2">
@@ -202,7 +282,15 @@ export function VanRegistry({ vans, orders, onAddVan, onToggleVan, onDeleteVan }
                       )}
                     </span>
                     <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-xs font-semibold text-foreground">{van.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-xs font-semibold text-foreground">{van.name}</span>
+                        {van.capacity && van.capacity > 0 && (
+                          <span className="inline-flex items-center gap-0.5 rounded bg-accent/10 px-1.5 py-0.5 text-[9px] font-mono font-bold text-accent border border-accent/20" title={`Capacity: ${van.capacity} ${van.capacityUnit || "bags"}`}>
+                            <Gauge className="h-2.5 w-2.5" />
+                            {van.capacity} {van.capacityUnit || "bags"}
+                          </span>
+                        )}
+                      </div>
                       <span className="truncate text-[10px] font-medium text-muted-foreground">{van.driver} · {van.plate}</span>
                     </div>
                   </div>
@@ -214,6 +302,17 @@ export function VanRegistry({ vans, orders, onAddVan, onToggleVan, onDeleteVan }
                     }`}>
                       {vanOrders.length} {vanOrders.length === 1 ? "order" : "orders"}
                     </span>
+                    {onUpdateVan && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => { e.stopPropagation(); handleStartEdit(van) }}
+                        title="Edit Fleet Name & Capacity"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -258,6 +357,34 @@ export function VanRegistry({ vans, orders, onAddVan, onToggleVan, onDeleteVan }
             <div className="text-[10px] text-muted-foreground">Fleet Vehicle</div>
           </div>
 
+          {/* Edit Fleet Details */}
+          {onUpdateVan && (
+            <button
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-foreground hover:bg-muted transition-colors"
+              onClick={() => {
+                const v = vans.find(v => v.id === contextMenu.vanId)
+                if (v) handleStartEdit(v)
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5 text-primary" />
+              Edit Fleet Details
+            </button>
+          )}
+
+          {/* Set Fleet Capacity */}
+          {onUpdateVan && (
+            <button
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-foreground hover:bg-muted transition-colors"
+              onClick={() => {
+                const v = vans.find(v => v.id === contextMenu.vanId)
+                if (v) handleOpenCapacityModal(v)
+              }}
+            >
+              <Gauge className="h-3.5 w-3.5 text-accent" />
+              Fleet Capacity / Unit
+            </button>
+          )}
+
           {/* Toggle Enable/Disable */}
           <button
             className="w-full flex items-center gap-2.5 px-3 py-1.5 text-foreground hover:bg-muted transition-colors"
@@ -279,6 +406,137 @@ export function VanRegistry({ vans, orders, onAddVan, onToggleVan, onDeleteVan }
             Delete Van from Fleet
           </button>
         </div>
+      )}
+
+      {/* ── Edit Fleet Dialog ── */}
+      {editingVan && (
+        <Dialog open={Boolean(editingVan)} onOpenChange={(o) => { if (!o) setEditingVan(null) }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-base font-semibold">Edit Fleet Vehicle</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-3.5 pt-2">
+              <div>
+                <Label className="text-xs font-medium">Fleet / Van Name</Label>
+                <Input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                  className="mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Driver Name</Label>
+                <Input
+                  value={editForm.driver}
+                  onChange={(e) => setEditForm((f) => ({ ...f, driver: e.target.value }))}
+                  className="mt-1 text-xs"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Plate Number</Label>
+                <Input
+                  value={editForm.plate}
+                  onChange={(e) => setEditForm((f) => ({ ...f, plate: e.target.value }))}
+                  className="mt-1 text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs font-medium">Fleet Capacity</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 50"
+                    value={editForm.capacity}
+                    onChange={(e) => setEditForm((f) => ({ ...f, capacity: e.target.value }))}
+                    className="mt-1 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Capacity Unit</Label>
+                  <Input
+                    placeholder="e.g. bags"
+                    value={editForm.capacityUnit}
+                    onChange={(e) => setEditForm((f) => ({ ...f, capacityUnit: e.target.value }))}
+                    className="mt-1 text-xs"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Color Badge Tag</Label>
+                <div className="mt-1.5 flex gap-2">
+                  {VAN_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className="h-7 w-7 rounded-full border-2 transition-all hover:scale-110"
+                      style={{
+                        backgroundColor: c,
+                        borderColor: editForm.color === c ? "var(--foreground)" : "transparent",
+                        transform: editForm.color === c ? "scale(1.15)" : "scale(1)",
+                      }}
+                      onClick={() => setEditForm((f) => ({ ...f, color: c }))}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => setEditingVan(null)}>
+                  Cancel
+                </Button>
+                <Button size="sm" className="flex-1 font-medium" onClick={handleSaveEdit}>
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ── Quick Fleet Capacity Modal ── */}
+      {capacityModalVan && (
+        <Dialog open={Boolean(capacityModalVan)} onOpenChange={(o) => { if (!o) setCapacityModalVan(null) }}>
+          <DialogContent className="sm:max-w-xs">
+            <DialogHeader>
+              <DialogTitle className="text-base font-semibold flex items-center gap-2">
+                <Gauge className="h-4 w-4 text-accent" />
+                Fleet Capacity: {capacityModalVan.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 pt-2">
+              <p className="text-xs text-muted-foreground">
+                Set how much material this vehicle holds on a single trip. When logging trips, clicking this van will auto-fill this quantity.
+              </p>
+              <div>
+                <Label className="text-xs font-medium">Capacity (Number)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 50"
+                  value={capacityForm.capacity}
+                  onChange={(e) => setCapacityForm((f) => ({ ...f, capacity: e.target.value }))}
+                  className="mt-1 text-xs font-mono font-bold"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Unit</Label>
+                <Input
+                  placeholder="e.g. bags, pcs, tons"
+                  value={capacityForm.capacityUnit}
+                  onChange={(e) => setCapacityForm((f) => ({ ...f, capacityUnit: e.target.value }))}
+                  className="mt-1 text-xs"
+                />
+              </div>
+              <div className="flex gap-2 mt-2">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => setCapacityModalVan(null)}>
+                  Cancel
+                </Button>
+                <Button size="sm" className="flex-1 font-medium" onClick={handleSaveCapacity}>
+                  Save Capacity
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* ── Delete Confirmation Modal ── */}

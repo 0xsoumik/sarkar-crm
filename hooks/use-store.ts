@@ -93,10 +93,10 @@ const SKU_DB: SKUItem[] = [
 ]
 
 const INITIAL_VANS: Van[] = [
-  { id: "v1", name: "Ashok Van", driver: "Ashok", plate: "WB-01-1234", color: "#e67e22", enabled: true },
-  { id: "v2", name: "Bappa Van", driver: "Bappa", plate: "WB-01-2345", color: "#2ecc71", enabled: true },
-  { id: "v3", name: "Sankar Van", driver: "Sankar", plate: "WB-01-3456", color: "#3498db", enabled: true },
-  { id: "v4", name: "Kata Van", driver: "Kata", plate: "WB-01-4567", color: "#e74c3c", enabled: true },
+  { id: "v1", name: "Ashok Van", driver: "Ashok", plate: "WB-01-1234", color: "#e67e22", enabled: true, capacity: 50, capacityUnit: "bags" },
+  { id: "v2", name: "Bappa Van", driver: "Bappa", plate: "WB-01-2345", color: "#2ecc71", enabled: true, capacity: 50, capacityUnit: "bags" },
+  { id: "v3", name: "Sankar Van", driver: "Sankar", plate: "WB-01-3456", color: "#3498db", enabled: true, capacity: 60, capacityUnit: "bags" },
+  { id: "v4", name: "Kata Van", driver: "Kata", plate: "WB-01-4567", color: "#e74c3c", enabled: true, capacity: 40, capacityUnit: "bags" },
 ]
 
 const INITIAL_WORKERS: Worker[] = [
@@ -779,6 +779,11 @@ export function useStore() {
     setVans((prev) => prev.map((v) => (v.id === id ? { ...v, enabled: !v.enabled } : v)))
   }, [])
 
+  const updateVan = useCallback((id: string, updates: Partial<Van>) => {
+    setVans((prev) => prev.map((v) => (v.id === id ? { ...v, ...updates } : v)))
+    logActivity("update_order", `Updated fleet van ${updates.name || id}`, undefined, { vanId: id, updates })
+  }, [logActivity])
+
   const deleteVan = useCallback((id: string) => {
     setVans((prev) => prev.filter((v) => v.id !== id))
     // Unlink the van from any active orders
@@ -1170,6 +1175,7 @@ export function useStore() {
     deletePaymentOut,
     addVan,
     toggleVan,
+    updateVan,
     deleteVan,
     getDeliveredQty,
     getVanById,

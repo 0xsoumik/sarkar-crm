@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import type { Order, Van, Trip, BillMode } from "@/lib/types"
 import { DeliveryProgress } from "./delivery-progress"
 import { generateBillHTML, generateTripSlipHTML, printHTML } from "@/lib/print-utils"
@@ -68,7 +68,38 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
   const [rateInput, setRateInput] = useState<string>(order.rate ? String(order.rate) : "")
   const [editRateModal, setEditRateModal] = useState(false)
   const [editRateValue, setEditRateValue] = useState<string>(order.rate ? String(order.rate) : "")
-  const [editRateReason, setEditRateReason] = useState<string>("")
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+
+  // Right-click context menu handler with viewport clamping
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const menuWidth = 200
+    const menuHeight = 220
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    setContextMenu({ x: Math.max(10, x), y: Math.max(10, y) })
+  }, [])
+
+  // Close context menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null)
+      }
+    }
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setContextMenu(null)
+    }
+    document.addEventListener("mousedown", handleClick)
+    document.addEventListener("keydown", handleEsc)
+    return () => {
+      document.removeEventListener("mousedown", handleClick)
+      document.removeEventListener("keydown", handleEsc)
+    }
+  }, [contextMenu])
 
   useEffect(() => {
     setRateInput(order.rate ? String(order.rate) : "")
@@ -191,6 +222,7 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
   return (
     <>
       <div
+        onContextMenu={handleContextMenu}
         className={`rounded-lg border bg-card transition-all duration-200 ${
           isDone ? "opacity-60 border-border/60 bg-muted/20" : "border-border hover:border-primary/40 shadow-xs hover:shadow-sm"
         } ${order.quality === "issue" ? "border-destructive/60 bg-destructive/5" : ""}`}
@@ -618,7 +650,7 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
             )}
 
             {/* Action buttons */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 justify-end">
               <Button size="sm" className="h-7 gap-1 text-xs" onClick={() => setTripModal(true)}>
                 <Plus className="h-3 w-3" />
                 Log Trip
@@ -678,9 +710,19 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
                     <button
                       key={van.id}
                       type="button"
-                      onClick={() => setTripForm((f) => ({ ...f, vanId: van.id }))}
+                      onClick={() => {
+                        let newQty = tripForm.quantity
+                        if (van.capacity && van.capacity > 0) {
+                          if (remaining !== Infinity) {
+                            newQty = String(Math.min(van.capacity, Math.max(0, remaining)))
+                          } else {
+                            newQty = String(van.capacity)
+                          }
+                        }
+                        setTripForm((f) => ({ ...f, vanId: van.id, quantity: newQty }))
+                      }}
                       className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-all ${
-                        tripForm.vanId === van.id ? "font-semibold" : "text-muted-foreground"
+                        tripForm.vanId === van.id ? "font-semibold shadow-xs" : "text-muted-foreground hover:text-foreground"
                       }`}
                       style={
                         tripForm.vanId === van.id
@@ -689,7 +731,12 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
                       }
                     >
                       <Truck className="h-3 w-3" />
-                      {van.name}
+                      <span>{van.name}</span>
+                      {van.capacity ? (
+                        <span className="ml-1 rounded px-1.5 py-0.5 text-[10px] font-mono font-medium border border-border/50 bg-muted/40">
+                          {van.capacity} {van.capacityUnit || order.unit || "bags"}
+                        </span>
+                      ) : null}
                     </button>
                   ))}
               </div>
@@ -711,6 +758,25 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
                 onChange={(e) => setTripForm((f) => ({ ...f, quantity: e.target.value }))}
                 placeholder={remaining !== Infinity ? `Max ${remaining} ${order.unit}` : `How many ${order.unit}?`}
               />
+              {/* Capacity subtraction feedback */}
+              {(() => {
+                const selectedVan = vans.find((v) => v.id === tripForm.vanId)
+                const currentTripQty = Number(tripForm.quantity) || 0
+                if (remaining !== Infinity && currentTripQty > 0) {
+                  const remainingAfterThisTrip = remaining - currentTripQty
+                  return (
+                    <div className="mt-1.5 flex items-center justify-between rounded bg-muted/50 px-2.5 py-1 text-[11px]">
+                      <span className="text-muted-foreground">
+                        {selectedVan?.capacity ? `Capacity ${selectedVan.capacity} fetched from ${selectedVan.name}` : `Logging ${currentTripQty} ${order.unit}`}
+                      </span>
+                      <span className={`font-mono font-semibold ${remainingAfterThisTrip < 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+                        Remaining after trip: {remainingAfterThisTrip} {order.unit}
+                      </span>
+                    </div>
+                  )
+                }
+                return null
+              })()}
               {remaining !== Infinity && Number(tripForm.quantity) > remaining && (
                 <p className="mt-1 text-[11px] font-medium text-destructive">
                   Cannot exceed remaining {remaining} {order.unit} from original bill of {order.originalTotalQty} {order.originalUnit}
@@ -883,6 +949,96 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Order Right-Click Context Menu ── */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-[9999] min-w-[200px] rounded-lg border border-border bg-card shadow-xl py-1 text-xs animate-in fade-in-0 zoom-in-95 duration-100"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {/* Header */}
+          <div className="px-3 py-1.5 border-b mb-1">
+            <div className="font-bold text-foreground text-[11px] truncate">
+              Order #{order.orderNo} · {order.name}
+            </div>
+            <div className="text-[10px] text-muted-foreground truncate">
+              {order.product} · {order.totalQty} {order.unit}
+            </div>
+          </div>
+
+          {/* Log Trip */}
+          <button
+            type="button"
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-foreground hover:bg-muted transition-colors text-left"
+            onClick={() => {
+              setTripModal(true)
+              setContextMenu(null)
+            }}
+          >
+            <Plus className="h-3.5 w-3.5 text-primary" />
+            Log Trip
+          </button>
+
+          {/* Bill */}
+          <button
+            type="button"
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-foreground hover:bg-muted transition-colors text-left"
+            onClick={() => {
+              setBillModal(true)
+              setContextMenu(null)
+            }}
+          >
+            <Printer className="h-3.5 w-3.5 text-foreground" />
+            Bill
+          </button>
+
+          {/* Done / Reopen */}
+          {isDone ? (
+            <button
+              type="button"
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-foreground hover:bg-muted transition-colors text-left"
+              onClick={() => {
+                onUpdate(order.id, { status: "pending" })
+                setContextMenu(null)
+              }}
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+              Reopen Order
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 text-foreground hover:bg-muted transition-colors text-left"
+              onClick={() => {
+                onUpdate(order.id, { status: "delivered" })
+                setContextMenu(null)
+              }}
+            >
+              <Check className="h-3.5 w-3.5 text-accent" />
+              Mark as Done
+            </button>
+          )}
+
+          {/* Separator */}
+          <div className="border-t my-1" />
+
+          {/* Delete */}
+          <button
+            type="button"
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-destructive hover:bg-destructive/10 transition-colors text-left"
+            onClick={() => {
+              setDeleteModal(true)
+              setDeleteReason("")
+              setContextMenu(null)
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            Delete Order
+          </button>
+        </div>
+      )}
     </>
   )
 }
