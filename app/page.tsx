@@ -37,6 +37,8 @@ import {
   Unlock,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   AlertTriangle,
   PanelLeftClose,
   PanelLeftOpen,
@@ -44,6 +46,8 @@ import {
   ArrowUp,
   Cloud,
   Download,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -82,6 +86,9 @@ export default function Page() {
   const [adminModalOpen, setAdminModalOpen] = useState(false)
   const [adminPinInput, setAdminPinInput] = useState("")
   const [adminPinError, setAdminPinError] = useState("")
+  const [deleteLogCollapsed, setDeleteLogCollapsed] = useState(false)
+  const [activityLogCollapsed, setActivityLogCollapsed] = useState(false)
+  const [mapVisible, setMapVisible] = useState(true)
 
   const orderRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const paymentRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -580,43 +587,54 @@ export default function Page() {
                   {/* Delete Logs */}
                   {showDeleteLogs && store.deleteLogs.length > 0 && (
                     <div className="mb-4 rounded-xl border border-destructive/30 bg-card p-3">
-                      <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center justify-between">
                         <h3 className="flex items-center gap-1 text-xs font-semibold text-destructive">
                           <FileWarning className="h-3.5 w-3.5" />
                           All Delete Logs ({store.deleteLogs.length})
                         </h3>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-2 text-[10px] text-destructive hover:bg-destructive/10"
-                          onClick={() => store.clearAllDeleteLogs()}
-                        >
-                          Clear All Logs
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-[10px] text-destructive hover:bg-destructive/10"
+                            onClick={() => store.clearAllDeleteLogs()}
+                          >
+                            Clear All Logs
+                          </Button>
+                          <button
+                            onClick={() => setDeleteLogCollapsed(p => !p)}
+                            className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-destructive transition-colors"
+                            title={deleteLogCollapsed ? "Expand" : "Collapse"}
+                          >
+                            {deleteLogCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-1">
-                        {store.deleteLogs.map((log) => (
-                          <div key={log.id} className="flex items-center justify-between rounded bg-destructive/5 px-2 py-1.5 text-[11px]">
-                            <div>
-                              <span className="font-medium text-destructive">[{log.type.toUpperCase()}]</span>{" "}
-                              <span className="text-foreground">{log.label}</span>{" "}
-                              <span className="text-muted-foreground">- {log.reason}</span>{" "}
-                              <span className="text-[10px] text-muted-foreground">
-                                {mounted ? `(${new Date(log.deletedAt).toLocaleDateString("en-IN")} ${new Date(log.deletedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })})` : ""}
-                              </span>
+                      {!deleteLogCollapsed && (
+                        <div className="mt-2 flex flex-col gap-1">
+                          {store.deleteLogs.map((log) => (
+                            <div key={log.id} className="flex items-center justify-between rounded bg-destructive/5 px-2 py-1.5 text-[11px]">
+                              <div>
+                                <span className="font-medium text-destructive">[{log.type.toUpperCase()}]</span>{" "}
+                                <span className="text-foreground">{log.label}</span>{" "}
+                                <span className="text-muted-foreground">- {log.reason}</span>{" "}
+                                <span className="text-[10px] text-muted-foreground">
+                                  {mounted ? `(${new Date(log.deletedAt).toLocaleDateString("en-IN")} ${new Date(log.deletedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })})` : ""}
+                                </span>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => store.removeDeleteLog(log.id)}
+                                title="Delete this log permanently"
+                              >
+                                ✕
+                              </Button>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
-                              onClick={() => store.removeDeleteLog(log.id)}
-                              title="Delete this log permanently"
-                            >
-                              ✕
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -819,27 +837,47 @@ export default function Page() {
                     
                     {/* Live Map */}
                     <div className="rounded-xl border bg-card p-4">
-                      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        Live Satellite Map
-                      </h3>
-                      {mounted && <LiveMap orders={store.orders} />}
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          Live Satellite Map
+                        </h3>
+                        <button
+                          onClick={() => setMapVisible(p => !p)}
+                          className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title={mapVisible ? "Hide map" : "Show map"}
+                        >
+                          {mapVisible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                      {mapVisible && mounted && <LiveMap orders={store.orders} />}
                     </div>
 
                     {/* Activity Log (Real-time, cumulative) */}
                     {mounted && (
                       <div className="rounded-xl border bg-card p-4">
-                        <h3 className="mb-3 text-sm font-semibold text-foreground">Activity Log (Real-time)</h3>
-                        <ActivityLogViewer
-                          logs={store.activityLogs.slice(0, 20)}
-                          payments={store.payments.filter((payment) => isToday(payment.createdAt))}
-                          paymentsOut={store.paymentsOut.filter((payment) => isToday(payment.createdAt))}
-                          orders={store.orders}
-                          onNavigate={handleActivityNavigate}
-                        />
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold text-foreground">Activity Log (Real-time)</h3>
+                          <button
+                            onClick={() => setActivityLogCollapsed(p => !p)}
+                            className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title={activityLogCollapsed ? "Expand" : "Collapse"}
+                          >
+                            {activityLogCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                        {!activityLogCollapsed && (
+                          <ActivityLogViewer
+                            logs={store.activityLogs.slice(0, 20)}
+                            payments={store.payments.filter((payment) => isToday(payment.createdAt))}
+                            paymentsOut={store.paymentsOut.filter((payment) => isToday(payment.createdAt))}
+                            orders={store.orders}
+                            onNavigate={handleActivityNavigate}
+                          />
+                        )}
                       </div>
                     )}
                   </div>
