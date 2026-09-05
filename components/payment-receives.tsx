@@ -125,15 +125,24 @@ export function PaymentReceives({ payments = [], deleteLogs = [], onAddPayment, 
     }
   }, [form.address, store])
 
-  // Real-time outstanding dues for selected customer phone
+  // Real-time outstanding dues for selected customer phone or name
   const customerDues = useMemo(() => {
-    if (!form.phone || form.phone.length !== 10) return 0
-    try {
-      return store?.getCustomerOutstandingDues ? store.getCustomerOutstandingDues(form.phone) : 0
-    } catch {
-      return 0
+    if (form.phone && form.phone.length === 10) {
+      try {
+        return store.getCustomerOutstandingDues(form.phone)
+      } catch {
+        return 0
+      }
     }
-  }, [form.phone, store])
+    if (form.name && form.name.trim().length >= 2) {
+      try {
+        return store.getCustomerOutstandingDues(form.name.trim())
+      } catch {
+        return 0
+      }
+    }
+    return 0
+  }, [form.phone, form.name, store])
 
   const handleSelectCustomer = (customer: { phone?: string; name?: string; address?: string }) => {
     setForm((prev) => ({
@@ -284,7 +293,9 @@ export function PaymentReceives({ payments = [], deleteLogs = [], onAddPayment, 
                             Matching Customers ({nameSuggestions.length})
                           </div>
                           {nameSuggestions.map((c: any, idx: number) => {
-                            const dues = store?.getCustomerOutstandingDues && c.phone ? store.getCustomerOutstandingDues(c.phone) : 0
+                            const dues = c.phone
+                              ? store.getCustomerOutstandingDues(c.phone)
+                              : (c.name ? store.getCustomerOutstandingDues(c.name) : 0)
                             return (
                               <button
                                 key={`name_sugg_${c.phone || c.name || idx}`}
@@ -346,7 +357,9 @@ export function PaymentReceives({ payments = [], deleteLogs = [], onAddPayment, 
                             Matching Customer IDs ({phoneSuggestions.length})
                           </div>
                           {phoneSuggestions.map((c: any, idx: number) => {
-                            const dues = store?.getCustomerOutstandingDues && c.phone ? store.getCustomerOutstandingDues(c.phone) : 0
+                            const dues = c.phone
+                              ? store.getCustomerOutstandingDues(c.phone)
+                              : (c.name ? store.getCustomerOutstandingDues(c.name) : 0)
                             return (
                               <button
                                 key={`phone_sugg_${c.phone || c.name || idx}`}

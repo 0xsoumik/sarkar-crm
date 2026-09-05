@@ -1,26 +1,38 @@
 import type { Order, Van, Trip, Payment, PaymentOut } from "./types"
 
-function fmtDateTime(iso: string) {
-  const d = new Date(iso)
-  return `${d.toLocaleDateString("en-IN")} ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}`
+function fmtDateTime(iso?: string | null) {
+  if (!iso) return "N/A"
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return "N/A"
+    return `${d.toLocaleDateString("en-IN")} ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}`
+  } catch {
+    return "N/A"
+  }
 }
 
-function fmtTime(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+function fmtTime(iso?: string | null) {
+  if (!iso) return "N/A"
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return "N/A"
+    return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+  } catch {
+    return "N/A"
+  }
 }
 
 export function generateBillHTML(order: Order, vans: Van[], showTrips: boolean): string {
-  const assignedVans = vans.filter((v) => order.vanIds.includes(v.id))
-  const delivered = order.trips.reduce((s, t) => s + t.quantity, 0)
+  const assignedVans = vans.filter((v) => (order.vanIds || []).includes(v.id))
+  const delivered = (order.trips || []).reduce((s, t) => s + (t.quantity || 0), 0)
   const remaining = order.originalTotalQty > 0 ? order.originalTotalQty - delivered : 0
 
   let tripsSection = ""
-  if (showTrips && order.trips.length > 0) {
+  if (showTrips && (order.trips || []).length > 0) {
     let cumulative = 0
-    const rows = order.trips
+    const rows = (order.trips || [])
       .map((t) => {
-        cumulative += t.quantity
+        cumulative += (t.quantity || 0)
         const van = vans.find((v) => v.id === t.vanId)
         return `<tr>
           <td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:bold;color:#c0392b">#${t.slipNo}</td>
@@ -118,7 +130,7 @@ export function generateBillHTML(order: Order, vans: Van[], showTrips: boolean):
 
 export function generateTripSlipHTML(order: Order, trip: Trip, vans: Van[]): string {
   const van = vans.find((v) => v.id === trip.vanId)
-  const totalDelivered = order.trips.reduce((s, t) => s + t.quantity, 0)
+  const totalDelivered = (order.trips || []).reduce((s, t) => s + (t.quantity || 0), 0)
 
   return `<!DOCTYPE html><html><head><title>Slip #${trip.slipNo} | ${order.originalBillNo || "N/A"}</title>
     <style>body{font-family:system-ui,sans-serif;padding:20px;max-width:400px;margin:0 auto}
@@ -155,6 +167,7 @@ export function generateTripSlipHTML(order: Order, trip: Trip, vans: Van[]): str
 }
 
 export function generateReceiptHTML(payment: Payment): string {
+  const safeAmt = (Number(payment.amount) || 0).toLocaleString("en-IN")
   return `<!DOCTYPE html><html><head><title>Receipt #${payment.receiptNo}</title>
     <style>body{font-family:system-ui,sans-serif;padding:20px;max-width:400px;margin:0 auto}
     @media print{body{padding:8px}}</style></head><body>
@@ -170,7 +183,7 @@ export function generateReceiptHTML(payment: Payment): string {
     </table>
     <div style="background:#f0fdf4;border:2px solid #27ae60;border-radius:10px;padding:16px;text-align:center;margin-bottom:16px">
       <div style="font-size:12px;color:#666;margin-bottom:4px">Amount Received</div>
-      <div style="font-size:28px;font-weight:bold;color:#27ae60">Rs. ${payment.amount.toLocaleString("en-IN")}</div>
+      <div style="font-size:28px;font-weight:bold;color:#27ae60">Rs. ${safeAmt}</div>
       <div style="font-size:13px;margin-top:6px;color:#333">Mode: <strong>${payment.mode}</strong></div>
     </div>
     ${payment.note ? `<div style="font-size:12px;background:#fffbe6;border-radius:6px;padding:8px;margin-bottom:12px"><strong>Note:</strong> ${payment.note}</div>` : ""}
@@ -183,6 +196,7 @@ export function generateReceiptHTML(payment: Payment): string {
 }
 
 export function generateVoucherHTML(payment: PaymentOut): string {
+  const safeAmt = (Number(payment.amount) || 0).toLocaleString("en-IN")
   return `<!DOCTYPE html><html><head><title>Voucher #${payment.voucherNo}</title>
     <style>body{font-family:system-ui,sans-serif;padding:20px;max-width:400px;margin:0 auto}
     @media print{body{padding:8px}}</style></head><body>
@@ -196,7 +210,7 @@ export function generateVoucherHTML(payment: PaymentOut): string {
     </table>
     <div style="background:#fef2f2;border:2px solid #e74c3c;border-radius:10px;padding:16px;text-align:center;margin-bottom:16px">
       <div style="font-size:12px;color:#666;margin-bottom:4px">Amount Paid</div>
-      <div style="font-size:28px;font-weight:bold;color:#e74c3c">Rs. ${payment.amount.toLocaleString("en-IN")}</div>
+      <div style="font-size:28px;font-weight:bold;color:#e74c3c">Rs. ${safeAmt}</div>
       <div style="font-size:13px;margin-top:6px;color:#333">Mode: <strong>${payment.mode}</strong></div>
     </div>
     ${payment.note ? `<div style="font-size:12px;background:#fffbe6;border-radius:6px;padding:8px;margin-bottom:12px"><strong>Note:</strong> ${payment.note}</div>` : ""}

@@ -314,9 +314,9 @@ export function AddOrderModal({ vans, onAdd, open: externalOpen, onOpenChange: e
                   />
                   {showPhoneSuggestions && phoneSuggestions.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-card border rounded-md shadow-md z-50">
-                      {phoneSuggestions.map(c => (
+                      {phoneSuggestions.map((c, idx) => (
                         <button
-                          key={c.phone}
+                          key={`phone_sugg_${c.phone || c.name || idx}`}
                           type="button"
                           onClick={() => handlePhoneSelect(c)}
                           className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted"
@@ -351,9 +351,9 @@ export function AddOrderModal({ vans, onAdd, open: externalOpen, onOpenChange: e
                   />
                   {showNameSuggestions && nameSuggestions.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-card border rounded-md shadow-md z-50 max-h-[160px] overflow-y-auto">
-                      {nameSuggestions.map(c => (
+                      {nameSuggestions.map((c, idx) => (
                         <button
-                          key={`name_sugg_${c.phone}`}
+                          key={`name_sugg_${c.phone || c.name || idx}`}
                           type="button"
                           onMouseDown={() => handleCustomerSelect(c)}
                           className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted border-b last:border-b-0"

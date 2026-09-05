@@ -189,7 +189,9 @@ export function subscribeToCloudChanges(onUpdate: (key: string, data: any) => vo
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (supabase) {
+        supabase.removeChannel(channel)
+      }
     }
   } catch (e) {
     console.warn("[CloudSync] Failed to subscribe to realtime:", e)

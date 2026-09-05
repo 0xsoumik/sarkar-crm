@@ -37,21 +37,33 @@ interface PaymentsOutProps {
   readOnly?: boolean
 }
 
-function formatTime(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+function formatTime(iso?: string | null) {
+  if (!iso) return ""
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ""
+    return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+  } catch {
+    return ""
+  }
 }
 
-function formatDateTime(iso: string) {
-  const d = new Date(iso)
-  return `${d.toLocaleDateString("en-IN")} ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}`
+function formatDateTime(iso?: string | null) {
+  if (!iso) return ""
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ""
+    return `${d.toLocaleDateString("en-IN")} ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}`
+  } catch {
+    return ""
+  }
 }
 
 function isToday(value?: string | null) {
   return isTodayIST(value)
 }
 
-export function PaymentsOut({ paymentsOut, deleteLogs, onAddPaymentOut, onDeletePaymentOut, paymentOutRefs, dateFilter, readOnly = false }: PaymentsOutProps) {
+export function PaymentsOut({ paymentsOut = [], deleteLogs = [], onAddPaymentOut, onDeletePaymentOut, paymentOutRefs, dateFilter, readOnly = false }: PaymentsOutProps) {
   const [mounted, setMounted] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -67,12 +79,15 @@ export function PaymentsOut({ paymentsOut, deleteLogs, onAddPaymentOut, onDelete
     setMounted(true)
   }, [])
 
+  const safePaymentsOut = Array.isArray(paymentsOut) ? paymentsOut : []
+  const safeDeleteLogs = Array.isArray(deleteLogs) ? deleteLogs : []
+
   const todayPaymentsOut = dateFilter
-    ? paymentsOut.filter((p) => (p.createdAt ? getISTDateString(p.createdAt) : "") === dateFilter)
-    : paymentsOut.filter((p) => isToday(p.createdAt))
-  const sortedPaymentsOut = [...todayPaymentsOut].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  const totalPaid = todayPaymentsOut.reduce((s, p) => s + p.amount, 0)
-  const paymentOutDeleteLogs = deleteLogs.filter((l) => l.type === "payment_out")
+    ? safePaymentsOut.filter((p) => p && (p.createdAt ? getISTDateString(p.createdAt) : "") === dateFilter)
+    : safePaymentsOut.filter((p) => p && isToday(p.createdAt))
+  const sortedPaymentsOut = [...todayPaymentsOut].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+  const totalPaid = todayPaymentsOut.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+  const paymentOutDeleteLogs = safeDeleteLogs.filter((l) => l && l.type === "payment_out")
 
   const handleAdd = () => {
     if (!form.truckNo.trim() || !form.amount) return

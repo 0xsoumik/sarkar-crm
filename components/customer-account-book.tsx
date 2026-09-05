@@ -72,38 +72,38 @@ export function CustomerAccountBook({
 
   // Calculate totals and unpriced count
   let unpricedCount = 0
-  const totalBilled = orders.reduce((sum, o) => {
-    const isUnpriced = !o.rate || o.rate === 0 || o.isUnpriced
+  const totalBilled = (orders || []).reduce((sum, o) => {
+    const isUnpriced = !o.rate || o.rate === 0 || Boolean(o.isUnpriced)
     if (isUnpriced) {
       unpricedCount++
       return sum
     }
     if (o.items && o.items.length > 1) {
-      return sum + o.items.reduce((s, i) => s + ((i.rate || 0) * (i.qty || 0)), 0)
+      return sum + o.items.reduce((s, i) => s + ((Number(i.rate) || 0) * (Number(i.qty) || 0)), 0)
     }
-    const orderAmount = (o.rate || 0) * (o.totalQty || 0)
+    const orderAmount = (Number(o.rate) || 0) * (Number(o.totalQty) || 0)
     return sum + orderAmount
   }, 0)
 
   // Only sum NON-DELETED payments in totalPaid
-  const activePayments = payments.filter((p) => !p.deleted)
-  const totalPaid = activePayments.reduce((sum, p) => sum + p.amount, 0)
+  const activePayments = (payments || []).filter((p) => !p.deleted)
+  const totalPaid = activePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
   const pendingBalance = totalBilled - totalPaid
 
   // Get all transactions in chronological order (ascending)
   const transactions = [
-    ...orders.map((order) => {
+    ...(orders || []).map((order) => {
       let isUnpriced = false
       let amt = 0
       let desc = ""
       if (order.items && order.items.length > 1) {
         isUnpriced = order.items.some(i => !i.rate || i.rate === 0)
-        amt = order.items.reduce((s, i) => s + ((i.rate || 0) * (i.qty || 0)), 0)
+        amt = order.items.reduce((s, i) => s + ((Number(i.rate) || 0) * (Number(i.qty) || 0)), 0)
         desc = order.items.map(i => `${i.product} (${i.qty} ${i.unit})`).join(", ")
       } else {
-        isUnpriced = !order.rate || order.rate === 0 || order.isUnpriced
+        isUnpriced = !order.rate || order.rate === 0 || Boolean(order.isUnpriced)
         const qty = order.totalQty || 0
-        amt = isUnpriced ? 0 : (order.rate || 0) * qty
+        amt = isUnpriced ? 0 : (Number(order.rate) || 0) * qty
         desc = `${order.product} - ${qty} ${order.unit}`
       }
       return {

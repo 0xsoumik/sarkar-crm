@@ -158,7 +158,7 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
       date: new Date().toISOString(),
       note: tripForm.note,
     })
-    const updatedOrder = { ...order, trips: [...order.trips, { ...newTrip }] }
+    const updatedOrder = { ...order, trips: [...(order.trips || []), { ...newTrip }] }
     printHTML(generateTripSlipHTML(updatedOrder, newTrip, vans))
     setTripForm({ vanId: "", quantity: "", note: "" })
     setTripModal(false)
@@ -188,7 +188,7 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
 
   const toggleVan = useCallback(
     (vanId: string) => {
-      const current = order.vanIds
+      const current = order.vanIds || []
       const next = current.includes(vanId) ? current.filter((id) => id !== vanId) : [...current, vanId]
       onUpdate(order.id, { vanIds: next })
     },
@@ -293,7 +293,7 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
               {order.quality === "issue" && (
                 <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive border border-destructive/20">Quality Issue</span>
               )}
-              {order.vanIds.length === 0 && order.status === "pending" && (
+              {(order.vanIds || []).length === 0 && order.status === "pending" && (
                 <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20">Unassigned</span>
               )}
               {isDone && (
@@ -359,7 +359,7 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
                   <div className="flex h-full">
                     {(() => {
                       const vanDeliveries = new Map<string, number>()
-                      for (const trip of order.trips) {
+                      for (const trip of (order.trips || [])) {
                         vanDeliveries.set(trip.vanId, (vanDeliveries.get(trip.vanId) || 0) + trip.quantity)
                       }
                       return Array.from(vanDeliveries.entries()).map(([vanId, qty]) => {
@@ -378,11 +378,11 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
                 <span className="text-[10px] font-semibold text-muted-foreground">
                   {delivered}/{order.totalQty} {order.unit}
                 </span>
-                                {order.trips.length > 0 && mounted && (
-                                  <span className="text-[9px] text-muted-foreground">
-                                    last: {formatTime(order.trips[order.trips.length - 1].date)}
-                                  </span>
-                                )}
+                {(order.trips || []).length > 0 && mounted && (
+                  <span className="text-[9px] text-muted-foreground">
+                    last: {formatTime(order.trips[order.trips.length - 1]?.date)}
+                  </span>
+                )}
               </div>
             )}
 
@@ -562,7 +562,7 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
                 {vans
                   .filter((v) => v.enabled)
                   .map((van) => {
-                    const isAssigned = order.vanIds.includes(van.id)
+                    const isAssigned = (order.vanIds || []).includes(van.id)
                     return (
                       <button
                         key={van.id}
@@ -582,11 +582,11 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
             </div>
 
             {/* Trip history with Slip IDs and exact timestamps */}
-            {order.trips.length > 0 && (
+            {(order.trips || []).length > 0 && (
               <div>
                 <Label className="text-[10px] text-muted-foreground">Trip Slips</Label>
                 <div className="mt-1 flex flex-col gap-1">
-                  {order.trips.map((trip) => {
+                  {(order.trips || []).map((trip) => {
                     const tripVan = vans.find((v) => v.id === trip.vanId)
                     return (
                       <div key={trip.id} className="flex items-center justify-between rounded-lg bg-secondary px-3 py-2 text-xs">
@@ -630,15 +630,15 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
             )}
 
             {/* Payment info on this order */}
-            {order.payments.length > 0 && (
+            {(order.payments || []).length > 0 && (
               <div>
                 <Label className="text-[10px] text-muted-foreground">Payments Received Today</Label>
                 <div className="mt-1 flex flex-col gap-1">
-                  {order.payments.map((p) => (
+                  {(order.payments || []).map((p) => (
                     <div key={p.id} className="flex items-center justify-between rounded-lg bg-accent/10 px-3 py-2 text-xs">
                       <div className="flex items-center gap-2">
                         <IndianRupee className="h-3 w-3 text-accent" />
-                        <span className="font-semibold text-accent">Rs. {p.amount.toLocaleString("en-IN")}</span>
+                        <span className="font-semibold text-accent">Rs. {(Number(p.amount) || 0).toLocaleString("en-IN")}</span>
                         <span className="text-muted-foreground">via {p.mode}</span>
                         <span className="text-[10px] text-muted-foreground">Receipt #{p.receiptNo}</span>
                       </div>

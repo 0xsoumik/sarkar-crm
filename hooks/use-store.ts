@@ -421,10 +421,10 @@ export function useStoreInternal() {
       console.log("[v0] Supabase configured - connecting cloud state...")
       fetchCloudState().then((cloudData) => {
         if (!cloudData) {
-          cloudFullyHydrated = true
+          console.warn("[v0] Cloud data not available, retaining local state")
           return
         }
-        if (cloudData.sarkar_builders_data && Array.isArray(cloudData.sarkar_builders_data.orders) && cloudData.sarkar_builders_data.orders.length > 0) {
+        if (cloudData.sarkar_builders_data && typeof cloudData.sarkar_builders_data === "object" && (Array.isArray(cloudData.sarkar_builders_data.orders) || Array.isArray(cloudData.sarkar_builders_data.payments))) {
           console.log("[v0] Cloud data found - syncing into local store...")
           const unpacked = unpackOrdersData(cloudData.sarkar_builders_data)
           setOrders(unpacked.loadedOrders)
@@ -517,6 +517,21 @@ export function useStoreInternal() {
   // Save to localStorage whenever data changes (but only after hydration)
   useEffect(() => {
     if (!hydrated) return
+
+    // CRITICAL DATA PROTECTION: Do not overwrite populated localStorage with empty arrays during initial sync
+    if (orders.length === 0 && payments.length === 0) {
+      const existing = localStorage.getItem("sarkar_builders_data")
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing)
+          if ((parsed.orders && parsed.orders.length > 0) || (parsed.payments && parsed.payments.length > 0)) {
+            console.warn("[Store] Guarding against overwriting populated localStorage with empty state")
+            return
+          }
+        } catch {}
+      }
+    }
+
     const dataToSave = {
       schemaVersion: 2,
       savedAt: new Date().toISOString(),
@@ -949,20 +964,38 @@ export function useStoreInternal() {
     return all.filter(c => c && typeof c.name === "string" && c.name.toLowerCase().includes(lower)).slice(0, 10)
   }, [getAllCustomers])
 
-  const getCustomerOutstandingDues = useCallback((phone: string): number => {
-    if (!phone) return 0
-    const digits = phone.replace(/\D/g, "").slice(-10)
-    if (!digits) return 0
-    const customerOrders = orders.filter(o => (o.phone || "").replace(/\D/g, "").slice(-10) === digits && !o.deleted)
-    const customerPayments = payments.filter(p => (p.phone || "").replace(/\D/g, "").slice(-10) === digits && !p.deleted)
+  const getCustomerOutstandingDues = useCallback((identifier: string): number => {
+    if (!identifier || !identifier.trim()) return 0
+    const digits = identifier.replace(/\D/g, "").slice(-10)
+    const lowerName = identifier.toLowerCase().trim()
+
+    const customerOrders = orders.filter(o => {
+      if (o.deleted) return false
+      if (digits && digits.length >= 7) {
+        const orderPhoneDigits = (o.phone || "").replace(/\D/g, "").slice(-10)
+        if (orderPhoneDigits && orderPhoneDigits === digits) return true
+      }
+      return (o.name || "").toLowerCase().trim() === lowerName
+    })
+
+    const customerPayments = payments.filter(p => {
+      if (p.deleted) return false
+      if (digits && digits.length >= 7) {
+        const pPhoneDigits = (p.phone || "").replace(/\D/g, "").slice(-10)
+        if (pPhoneDigits && pPhoneDigits === digits) return true
+      }
+      return (p.name || "").toLowerCase().trim() === lowerName
+    })
+
     const billed = customerOrders.reduce((sum, o) => {
       if (o.items && o.items.length > 1) {
         return sum + o.items.reduce((itemSum, item) => itemSum + ((Number(item.rate) || 0) * (Number(item.qty) || 0)), 0)
       }
       const rate = Number(o.rate) || 0
-      const isUnpriced = rate === 0 || o.isUnpriced
+      const isUnpriced = rate === 0 || Boolean(o.isUnpriced)
       return sum + (isUnpriced ? 0 : rate * (Number(o.totalQty) || 0))
     }, 0)
+
     const paid = customerPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
     const dues = Math.max(0, billed - paid)
     return isNaN(dues) ? 0 : Math.round(dues)
@@ -986,74 +1019,71 @@ export function useStoreInternal() {
     return SKU_DB.find(s => s.product === product)?.rate || 0
   }, [skuList])
 
-  // Advanced customer search with priority: phone > phone+name > firstName+address+phone > firstName+address > fullName+address
+  // Advanced customer search with priority: phone > name exact > name contains
   const searchCustomer = useCallback((query: string) => {
-    if (!query.trim()) return null
-    
+    if (!query || !query.trim()) return null
+    const all = getAllCustomers()
     const queryLower = query.toLowerCase().trim()
-    const parts = queryLower.split(/\s+/)
-    const phonePattern = /^\d{10}$/
-    const isPhone = phonePattern.test(queryLower)
+    const digits = queryLower.replace(/\D/g, "").slice(-10)
 
     // Priority 1: Phone number match
-    if (isPhone) {
-      const customer = CUSTOMERS_DB.find(c => c.phone === queryLower)
+    if (digits && digits.length >= 7) {
+      const customer = all.find(c => c && c.phone && c.phone.includes(digits))
       if (customer) return customer
     }
 
-    // Priority 2: Phone + Full name match
-    if (isPhone && parts.length > 1) {
-      const phone = queryLower
-      const nameQuery = parts.slice(1).join(" ")
-      const customer = CUSTOMERS_DB.find(c => c.phone === phone && c.name.toLowerCase().includes(nameQuery))
-      if (customer) return customer
-    }
+    // Priority 2: Full name exact match
+    const exactName = all.find(c => c && c.name && c.name.toLowerCase().trim() === queryLower)
+    if (exactName) return exactName
 
-    // Priority 3: First name + Address + Phone
-    if (parts.length >= 3) {
-      const firstName = parts[0]
-      const address = parts.slice(1, -1).join(" ")
-      const phone = parts[parts.length - 1]
-      const customer = CUSTOMERS_DB.find(c => 
-        c.name.toLowerCase().startsWith(firstName) && 
-        c.address.toLowerCase().includes(address) &&
-        c.phone.includes(phone)
-      )
-      if (customer) return customer
-    }
-
-    // Priority 4: First name + Address
-    if (parts.length >= 2) {
-      const firstName = parts[0]
-      const address = parts.slice(1).join(" ")
-      const customer = CUSTOMERS_DB.find(c => 
-        c.name.toLowerCase().startsWith(firstName) && 
-        c.address.toLowerCase().includes(address)
-      )
-      if (customer) return customer
-    }
-
-    // Priority 5: Full name + Address
-    const fullNameMatch = CUSTOMERS_DB.find(c => 
-      c.name.toLowerCase().includes(queryLower)
-    )
-    if (fullNameMatch) return fullNameMatch
+    // Priority 3: Name substring match
+    const partialName = all.find(c => c && c.name && c.name.toLowerCase().includes(queryLower))
+    if (partialName) return partialName
 
     return null
-  }, [])
+  }, [getAllCustomers])
 
-  // Get customer profile with all related data
-  const getCustomerProfile = useCallback((phone: string) => {
-    const customer = getCustomerByPhone(phone)
+  // Get customer profile with all related data (supports phone or name)
+  const getCustomerProfile = useCallback((identifier: string) => {
+    if (!identifier || !identifier.trim()) return null
+    const digits = identifier.replace(/\D/g, "").slice(-10)
+    const lower = identifier.toLowerCase().trim()
+
+    let customer = digits && digits.length >= 7 ? getCustomerByPhone(digits) : null
+    if (!customer) {
+      const all = getAllCustomers()
+      customer = all.find(c => c && (c.name || "").toLowerCase().trim() === lower) || null
+    }
+    if (!customer) {
+      const all = getAllCustomers()
+      customer = all.find(c => c && (c.name || "").toLowerCase().includes(lower)) || null
+    }
     if (!customer) return null
 
-    const customerOrders = orders.filter(o => o.phone === phone && !o.deleted)
-    const customerPayments = payments.filter(p => p.phone === phone)
+    const targetPhoneDigits = customer.phone ? customer.phone.replace(/\D/g, "").slice(-10) : ""
+    const targetLowerName = (customer.name || "").toLowerCase().trim()
+
+    const customerOrders = orders.filter(o => {
+      if (o.deleted) return false
+      if (targetPhoneDigits && targetPhoneDigits.length >= 7) {
+        const oDigits = (o.phone || "").replace(/\D/g, "").slice(-10)
+        if (oDigits && oDigits === targetPhoneDigits) return true
+      }
+      return (o.name || "").toLowerCase().trim() === targetLowerName
+    })
+
+    const customerPayments = payments.filter(p => {
+      if (targetPhoneDigits && targetPhoneDigits.length >= 7) {
+        const pDigits = (p.phone || "").replace(/\D/g, "").slice(-10)
+        if (pDigits && pDigits === targetPhoneDigits) return true
+      }
+      return (p.name || "").toLowerCase().trim() === targetLowerName
+    })
     
-    const totalAmount = customerPayments.filter(p => !p.deleted).reduce((sum, p) => sum + p.amount, 0)
-    const totalDelivered = customerOrders.reduce((sum, o) => sum + o.trips.reduce((s, t) => s + t.quantity, 0), 0)
-    const unpricedOrdersCount = customerOrders.filter(o => !o.rate || o.rate === 0 || o.isUnpriced).length
-    const lastOrderDate = customerOrders.length > 0 ? customerOrders[customerOrders.length - 1].createdAt : null
+    const totalAmount = customerPayments.filter(p => !p.deleted).reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    const totalDelivered = customerOrders.reduce((sum, o) => sum + (o.trips || []).reduce((s, t) => s + (Number(t.quantity) || 0), 0), 0)
+    const unpricedOrdersCount = customerOrders.filter(o => !o.rate || o.rate === 0 || Boolean(o.isUnpriced)).length
+    const lastOrderDate = customerOrders.length > 0 ? customerOrders[customerOrders.length - 1]?.createdAt : null
 
     return {
       customer,
@@ -1065,7 +1095,7 @@ export function useStoreInternal() {
       orders: customerOrders,
       payments: customerPayments,
     }
-  }, [getCustomerByPhone, orders, payments])
+  }, [getCustomerByPhone, getAllCustomers, orders, payments])
 
   // Reorder orders by priority (higher = more urgent)
   const reorderByPriority = useCallback((orderId: string, direction: "up" | "down") => {

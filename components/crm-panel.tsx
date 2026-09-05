@@ -45,14 +45,14 @@ interface CRMProps {
 type SortKey = "recent" | "dues" | "payments" | "orders"
 
 // Micro sparkline data builder for customer payment history
-function paymentSparkline(payments: Payment[]): { v: number }[] {
-  if (!payments.length) return Array(8).fill({ v: 0 })
-  const sorted = [...payments].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  const max = Math.max(...sorted.map(p => p.amount), 1)
-  return sorted.slice(-8).map(p => ({ v: Math.round((p.amount / max) * 100) }))
+function paymentSparkline(payments?: Payment[]): { v: number }[] {
+  if (!payments || !payments.length) return Array(8).fill({ v: 0 })
+  const sorted = [...payments].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+  const max = Math.max(...sorted.map(p => Number(p.amount) || 0), 1)
+  return sorted.slice(-8).map(p => ({ v: Math.round(((Number(p.amount) || 0) / max) * 100) }))
 }
 
-export function CRMPanel({ orders, payments, customers, onAddOrder, onAddPayment, onUpdateOrder, vans = [] }: CRMProps) {
+export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, onAddPayment, onUpdateOrder, vans = [] }: CRMProps) {
   const store = useStore()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null)
@@ -92,7 +92,7 @@ export function CRMPanel({ orders, payments, customers, onAddOrder, onAddPayment
           isUnpriced = order.items.some(i => !i.rate || i.rate === 0)
           orderAmt = order.items.reduce((s, i) => s + ((i.rate || 0) * (i.qty || 0)), 0)
         } else {
-          isUnpriced = !order.rate || order.rate === 0 || order.isUnpriced
+          isUnpriced = !order.rate || order.rate === 0 || Boolean(order.isUnpriced)
           orderAmt = isUnpriced ? 0 : (order.rate || 0) * (order.totalQty || 0)
         }
         if (isUnpriced) c.unpricedCount++

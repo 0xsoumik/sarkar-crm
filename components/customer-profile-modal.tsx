@@ -48,13 +48,13 @@ export function CustomerProfileModal({ profile, open, onOpenChange }: CustomerPr
       let qty = order.totalQty || 0
       if (order.items && order.items.length > 1) {
         isUnpriced = order.items.some(i => !i.rate || i.rate === 0)
-        amt = order.items.reduce((s, i) => s + ((i.rate || 0) * (i.qty || 0)), 0)
+        amt = order.items.reduce((s, i) => s + ((Number(i.rate) || 0) * (Number(i.qty) || 0)), 0)
         desc = order.items.map(i => `${i.product} (${i.qty} ${i.unit})`).join(", ")
-        qty = order.items.reduce((s, i) => s + (i.qty || 0), 0)
+        qty = order.items.reduce((s, i) => s + (Number(i.qty) || 0), 0)
         unit = "items"
       } else {
-        isUnpriced = !order.rate || order.rate === 0 || order.isUnpriced
-        amt = isUnpriced ? 0 : (order.rate || 0) * qty
+        isUnpriced = !order.rate || order.rate === 0 || Boolean(order.isUnpriced)
+        amt = isUnpriced ? 0 : (Number(order.rate) || 0) * qty
         desc = `${order.product} (${qty} ${order.unit})`
       }
       return {
@@ -121,11 +121,11 @@ export function CustomerProfileModal({ profile, open, onOpenChange }: CustomerPr
     if (o.items && o.items.length > 1) {
       return sum + o.items.reduce((s, i) => s + ((i.rate || 0) * (i.qty || 0)), 0)
     }
-    const isUnpriced = !o.rate || o.rate === 0 || o.isUnpriced
-    return sum + (isUnpriced ? 0 : (o.rate || 0) * (o.totalQty || 0))
+    const isUnpriced = !o.rate || o.rate === 0 || Boolean(o.isUnpriced)
+    return sum + (isUnpriced ? 0 : (Number(o.rate) || 0) * (Number(o.totalQty) || 0))
   }, 0)
   const activePayments = (payments || []).filter((p) => !p.deleted)
-  const totalPaid = activePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+  const totalPaid = activePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
   const netDue = totalBilled - totalPaid
 
   // Filtered transactions
