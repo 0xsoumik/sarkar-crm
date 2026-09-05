@@ -241,9 +241,7 @@ export const StoreContext = createContext<StoreValue | null>(null)
 
 export function useStore(): StoreValue {
   const ctx = useContext(StoreContext)
-  // Fallback: if called outside StoreProvider (e.g. in a test or SSR), spin up own instance
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  if (!ctx) return useStoreInternal()
+  if (!ctx) throw new Error("useStore must be used inside <StoreProvider>. Wrap your root component.")
   return ctx
 }
 
