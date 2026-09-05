@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useStore } from "@/hooks/use-store"
-import { StoreProvider } from "@/hooks/store-provider"
 import type { FilterTab, CustomerProfile, AppTab } from "@/lib/types"
 import { getISTDateString, isTodayIST } from "@/lib/validation"
 import { StatsBar } from "@/components/stats-bar"
@@ -68,14 +67,6 @@ const TABS: { key: FilterTab; label: string }[] = [
 ]
 
 export default function Page() {
-  return (
-    <StoreProvider>
-      <PageContent />
-    </StoreProvider>
-  )
-}
-
-function PageContent() {
   const store = useStore()
   const [mounted, setMounted] = useState(false)
   const [activeAppTab, setActiveAppTab] = useState<AppTab>("daily-sheet")

@@ -721,10 +721,17 @@ export function useStoreInternal() {
     
     setPayments((prev) => [...prev, newPayment])
     setCounters((prev) => ({ ...prev, nextReceiptNo: receiptNo + 1 }))
-    logActivity("add_payment", `Received Payment Receipt #${receiptNo} from ${payment.name} (Rs. ${payment.amount})`, undefined, { receiptNo, amount: payment.amount, paymentId: newPayment.id })
+    logActivity("add_payment", `Received Payment Receipt #${receiptNo} from ${payment.name || "Customer"} (Rs. ${payment.amount})`, undefined, { 
+      receiptNo, 
+      amount: payment.amount, 
+      paymentId: newPayment.id,
+      name: payment.name,
+      phone: payment.phone,
+      address: payment.address,
+    })
     
     return newPayment
-  }, [counters, logActivity])
+  }, [payments, counters, logActivity])
 
   const deletePayment = useCallback((paymentId: string, reason: string) => {
     const now = new Date().toISOString()
@@ -820,38 +827,111 @@ export function useStoreInternal() {
     [vans]
   )
 
-  // Aggregate all unique customers from static DB, orders, and payments
+  // Aggregate all unique customers from static DB, orders, payments, deleteLogs, and activityLogs
   const getAllCustomers = useCallback((): Customer[] => {
-    const map = new Map<string, Customer>()
-    CUSTOMERS_DB.forEach(c => {
-      if (c.phone) map.set(c.phone, { phone: c.phone, name: c.name, address: c.address })
-    })
-    orders.forEach(o => {
-      if (o.phone && !o.deleted) {
-        map.set(o.phone, {
-          phone: o.phone,
-          name: o.name || "Customer",
-          address: o.address || "",
-        })
+    const phoneMap = new Map<string, Customer>()
+    const nameMap = new Map<string, Customer>()
+
+    const registerCustomer = (rawName?: string, rawPhone?: string, rawAddress?: string) => {
+      const name = (rawName || "").trim()
+      const phoneDigits = (rawPhone || "").replace(/\D/g, "").slice(-10)
+      const address = (rawAddress || "").trim()
+
+      // Ignore noise or system strings
+      if (!name && !phoneDigits) return
+      const lower = name.toLowerCase()
+      if (lower === "customer" || lower === "supplier" || lower === "system" || lower === "fleet") {
+        if (!phoneDigits) return
+      }
+
+      const customer: Customer = {
+        name: name || "Customer",
+        phone: phoneDigits,
+        address: address,
+      }
+
+      if (phoneDigits && phoneDigits.length === 10) {
+        const existing = phoneMap.get(phoneDigits)
+        if (existing) {
+          if ((!existing.name || existing.name === "Customer") && customer.name) {
+            existing.name = customer.name
+          }
+          if (!existing.address && customer.address) {
+            existing.address = customer.address
+          }
+        } else {
+          phoneMap.set(phoneDigits, customer)
+        }
+      }
+
+      if (name && lower !== "customer") {
+        const existing = nameMap.get(lower)
+        if (existing) {
+          if (!existing.phone && customer.phone) existing.phone = customer.phone
+          if (!existing.address && customer.address) existing.address = customer.address
+        } else {
+          nameMap.set(lower, customer)
+        }
+      }
+    }
+
+    // 1. Static CUSTOMERS_DB
+    CUSTOMERS_DB.forEach(c => registerCustomer(c.name, c.phone, c.address))
+
+    // 2. Orders (include ALL orders, including soft-deleted ones)
+    orders.forEach(o => registerCustomer(o.name, o.phone, o.address))
+
+    // 3. Payments (include ALL payments, including soft-deleted ones)
+    payments.forEach(p => registerCustomer(p.name, p.phone, p.address))
+
+    // 4. Delete Logs (recover customers from delete log labels)
+    deleteLogs.forEach(dl => {
+      if (dl && dl.label) {
+        // e.g. "Order #5 - Upananda Roy"
+        const orderMatch = dl.label.match(/Order\s*#\w+\s*-\s*([^,\n\-]+)/i)
+        if (orderMatch && orderMatch[1]) registerCustomer(orderMatch[1].trim())
+
+        // e.g. "Payment Receipt #24 from Soumik Sarkar"
+        const paymentMatch = dl.label.match(/from\s+([^,\n\(\)\-]+)/i)
+        if (paymentMatch && paymentMatch[1]) registerCustomer(paymentMatch[1].trim())
       }
     })
-    payments.forEach(p => {
-      if (p.phone) {
-        const existing = map.get(p.phone)
-        map.set(p.phone, {
-          phone: p.phone,
-          name: p.name || existing?.name || "Customer",
-          address: p.address || existing?.address || "",
-        })
+
+    // 5. Activity Logs (recover customers from all actions & details)
+    activityLogs.forEach(al => {
+      if (!al) return
+      if (al.details) {
+        const dName = al.details.name || al.details.customerName
+        const dPhone = al.details.phone || al.details.customerPhone
+        const dAddress = al.details.address || al.details.customerAddress
+        if (dName || dPhone) registerCustomer(dName, dPhone, dAddress)
+      }
+      if (al.label) {
+        const orderMatch = al.label.match(/Order\s*#\w+\s*-\s*([^,\n\-]+)/i)
+        if (orderMatch && orderMatch[1]) registerCustomer(orderMatch[1].trim(), al.details?.phone, al.details?.address)
+
+        const paymentMatch = al.label.match(/from\s+([^,\n\(\)\-]+)/i)
+        if (paymentMatch && paymentMatch[1]) registerCustomer(paymentMatch[1].trim(), al.details?.phone, al.details?.address)
       }
     })
-    return Array.from(map.values())
-  }, [orders, payments])
+
+    // Combine all unique customers (prioritizing 10-digit phone records)
+    const combined = new Map<string, Customer>()
+    phoneMap.forEach((c, phone) => combined.set(phone, c))
+    nameMap.forEach((c, lowerName) => {
+      if (c.phone && combined.has(c.phone)) return
+      combined.set(`name_${lowerName}`, c)
+    })
+
+    return Array.from(combined.values())
+  }, [orders, payments, deleteLogs, activityLogs])
 
   const getCustomerByPhone = useCallback((phone: string) => {
     if (!phone) return null
+    const digits = phone.replace(/\D/g, "").slice(-10)
+    if (!digits) return null
     const all = getAllCustomers()
-    return all.find(c => c.phone === phone) || null
+    return all.find(c => c && c.phone === digits) || null
   }, [getAllCustomers])
 
   const getCustomersByPhonePrefix = useCallback((prefix: string): Customer[] => {
@@ -859,36 +939,40 @@ export function useStoreInternal() {
     const digits = prefix.replace(/\D/g, "").trim()
     if (!digits) return []
     const all = getAllCustomers()
-    return all.filter(c => c.phone.includes(digits)).slice(0, 10)
+    return all.filter(c => c && typeof c.phone === "string" && c.phone.includes(digits)).slice(0, 10)
   }, [getAllCustomers])
 
   const getCustomersByNameQuery = useCallback((nameQuery: string): Customer[] => {
     if (!nameQuery || !nameQuery.trim()) return []
     const lower = nameQuery.toLowerCase().trim()
     const all = getAllCustomers()
-    return all.filter(c => c.name.toLowerCase().includes(lower)).slice(0, 10)
+    return all.filter(c => c && typeof c.name === "string" && c.name.toLowerCase().includes(lower)).slice(0, 10)
   }, [getAllCustomers])
 
   const getCustomerOutstandingDues = useCallback((phone: string): number => {
     if (!phone) return 0
-    const customerOrders = orders.filter(o => o.phone === phone && !o.deleted)
-    const customerPayments = payments.filter(p => p.phone === phone && !p.deleted)
+    const digits = phone.replace(/\D/g, "").slice(-10)
+    if (!digits) return 0
+    const customerOrders = orders.filter(o => (o.phone || "").replace(/\D/g, "").slice(-10) === digits && !o.deleted)
+    const customerPayments = payments.filter(p => (p.phone || "").replace(/\D/g, "").slice(-10) === digits && !p.deleted)
     const billed = customerOrders.reduce((sum, o) => {
       if (o.items && o.items.length > 1) {
-        return sum + o.items.reduce((itemSum, item) => itemSum + ((item.rate || 0) * (item.qty || 0)), 0)
+        return sum + o.items.reduce((itemSum, item) => itemSum + ((Number(item.rate) || 0) * (Number(item.qty) || 0)), 0)
       }
-      const isUnpriced = !o.rate || o.rate === 0 || o.isUnpriced
-      return sum + (isUnpriced ? 0 : (o.rate || 0) * (o.totalQty || 0))
+      const rate = Number(o.rate) || 0
+      const isUnpriced = rate === 0 || o.isUnpriced
+      return sum + (isUnpriced ? 0 : rate * (Number(o.totalQty) || 0))
     }, 0)
-    const paid = customerPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
-    return Math.max(0, billed - paid)
+    const paid = customerPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    const dues = Math.max(0, billed - paid)
+    return isNaN(dues) ? 0 : Math.round(dues)
   }, [orders, payments])
 
   const getSuggestedAddresses = useCallback((input: string) => {
-    if (!input) return []
-    const lower = input.toLowerCase()
+    if (!input || !input.trim()) return []
+    const lower = input.toLowerCase().trim()
     const all = getAllCustomers()
-    return [...new Set(all.map(c => c.address).filter(a => a && a.toLowerCase().includes(lower)))].slice(0, 8)
+    return [...new Set(all.map(c => c.address).filter(a => a && typeof a === "string" && a.toLowerCase().includes(lower)))].slice(0, 8)
   }, [getAllCustomers])
 
   const getCustomersByNamePrefix = useCallback((prefix: string) => {

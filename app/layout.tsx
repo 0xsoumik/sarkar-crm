@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { StoreProvider } from '@/hooks/store-provider'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -49,7 +50,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        {children}
+        <StoreProvider>
+          {children}
+        </StoreProvider>
         <Analytics />
       </body>
     </html>

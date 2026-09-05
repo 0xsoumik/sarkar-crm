@@ -33,8 +33,8 @@ import { getISTDateString, isTodayIST } from "@/lib/validation"
 const PAYMENT_MODES = ["CASH", "NEFT", "CHEQUE", "UPI"] as const
 
 interface PaymentReceivesProps {
-  payments: Payment[]
-  deleteLogs: DeleteLog[]
+  payments?: Payment[]
+  deleteLogs?: DeleteLog[]
   onAddPayment: (payment: Omit<Payment, "id" | "receiptNo" | "createdAt">) => Payment
   onDeletePayment: (id: string, reason: string) => void
   onCustomerClick?: (phone: string) => void
@@ -43,21 +43,33 @@ interface PaymentReceivesProps {
   readOnly?: boolean
 }
 
-function formatTime(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+function formatTime(iso?: string | null) {
+  if (!iso) return ""
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ""
+    return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+  } catch {
+    return ""
+  }
 }
 
-function formatDateTime(iso: string) {
-  const d = new Date(iso)
-  return `${d.toLocaleDateString("en-IN")} ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}`
+function formatDateTime(iso?: string | null) {
+  if (!iso) return ""
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ""
+    return `${d.toLocaleDateString("en-IN")} ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}`
+  } catch {
+    return ""
+  }
 }
 
 function isToday(value?: string | null) {
   return isTodayIST(value)
 }
 
-export function PaymentReceives({ payments, deleteLogs, onAddPayment, onDeletePayment, onCustomerClick, paymentRefs, dateFilter, readOnly = false }: PaymentReceivesProps) {
+export function PaymentReceives({ payments = [], deleteLogs = [], onAddPayment, onDeletePayment, onCustomerClick, paymentRefs, dateFilter, readOnly = false }: PaymentReceivesProps) {
   const store = useStore()
   const [mounted, setMounted] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
@@ -86,33 +98,49 @@ export function PaymentReceives({ payments, deleteLogs, onAddPayment, onDeletePa
   // Customer suggestions based on typed Name
   const nameSuggestions = useMemo(() => {
     if (!form.name || form.name.trim().length < 1) return []
-    return store.getCustomersByNameQuery(form.name)
+    try {
+      return store?.getCustomersByNameQuery ? store.getCustomersByNameQuery(form.name) : []
+    } catch {
+      return []
+    }
   }, [form.name, store])
 
   // Customer suggestions based on typed Phone
   const phoneSuggestions = useMemo(() => {
     if (!form.phone || form.phone.trim().length < 1) return []
-    return store.getCustomersByPhonePrefix(form.phone)
+    try {
+      return store?.getCustomersByPhonePrefix ? store.getCustomersByPhonePrefix(form.phone) : []
+    } catch {
+      return []
+    }
   }, [form.phone, store])
 
   // Address suggestions based on typed Address
   const addressSuggestions = useMemo(() => {
     if (!form.address || form.address.trim().length < 1) return []
-    return store.getSuggestedAddresses(form.address)
+    try {
+      return store?.getSuggestedAddresses ? store.getSuggestedAddresses(form.address) : []
+    } catch {
+      return []
+    }
   }, [form.address, store])
 
   // Real-time outstanding dues for selected customer phone
   const customerDues = useMemo(() => {
     if (!form.phone || form.phone.length !== 10) return 0
-    return store.getCustomerOutstandingDues(form.phone)
+    try {
+      return store?.getCustomerOutstandingDues ? store.getCustomerOutstandingDues(form.phone) : 0
+    } catch {
+      return 0
+    }
   }, [form.phone, store])
 
-  const handleSelectCustomer = (customer: { phone: string; name: string; address: string }) => {
+  const handleSelectCustomer = (customer: { phone?: string; name?: string; address?: string }) => {
     setForm((prev) => ({
       ...prev,
-      name: customer.name,
-      phone: customer.phone,
-      address: customer.address,
+      name: customer.name || prev.name,
+      phone: customer.phone || prev.phone,
+      address: customer.address || prev.address,
     }))
     setShowNameSuggestions(false)
     setShowPhoneSuggestions(false)
@@ -120,25 +148,29 @@ export function PaymentReceives({ payments, deleteLogs, onAddPayment, onDeletePa
 
   // Filter payments for specified date or today, and sort newest first (top to bottom)
   // Exclude soft-deleted payments from this view entirely
+  const safePayments = Array.isArray(payments) ? payments : []
+  const safeDeleteLogs = Array.isArray(deleteLogs) ? deleteLogs : []
+
   const todayPayments = (dateFilter
-    ? payments.filter((p) => !p.deleted && (p.createdAt ? getISTDateString(p.createdAt) : "") === dateFilter)
-    : payments.filter((p) => !p.deleted && isToday(p.createdAt)))
-  const sortedPayments = [...todayPayments].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    ? safePayments.filter((p) => p && !p.deleted && (p.createdAt ? getISTDateString(p.createdAt) : "") === dateFilter)
+    : safePayments.filter((p) => p && !p.deleted && isToday(p.createdAt)))
+  const sortedPayments = [...todayPayments].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
   
   const filteredPayments = sortedPayments.filter((p) => {
+    if (!p) return false
     if (!searchQuery.trim()) return true
     const q = searchQuery.toLowerCase().trim()
     return (
-      p.name.toLowerCase().includes(q) ||
-      p.phone.includes(q) ||
-      `#${p.receiptNo}`.includes(q) ||
-      p.mode.toLowerCase().includes(q) ||
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.phone && p.phone.includes(q)) ||
+      `#${p.receiptNo || ""}`.includes(q) ||
+      (p.mode && p.mode.toLowerCase().includes(q)) ||
       (p.note && p.note.toLowerCase().includes(q))
     )
   })
 
-  const totalReceived = todayPayments.reduce((s, p) => s + p.amount, 0)
-  const paymentDeleteLogs = deleteLogs.filter((l) => l.type === "payment")
+  const totalReceived = todayPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+  const paymentDeleteLogs = safeDeleteLogs.filter((l) => l && l.type === "payment")
 
   const handleAdd = () => {
     if (!form.name.trim() || !form.amount) return
@@ -251,24 +283,24 @@ export function PaymentReceives({ payments, deleteLogs, onAddPayment, onDeletePa
                           <div className="px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
                             Matching Customers ({nameSuggestions.length})
                           </div>
-                          {nameSuggestions.map((c: any) => {
-                            const dues = store.getCustomerOutstandingDues(c.phone)
+                          {nameSuggestions.map((c: any, idx: number) => {
+                            const dues = store?.getCustomerOutstandingDues && c.phone ? store.getCustomerOutstandingDues(c.phone) : 0
                             return (
                               <button
-                                key={`name_sugg_${c.phone}`}
+                                key={`name_sugg_${c.phone || c.name || idx}`}
                                 type="button"
                                 onMouseDown={() => handleSelectCustomer(c)}
                                 className="w-full text-left px-3 py-2 text-xs hover:bg-muted/80 transition-colors flex items-center justify-between gap-2"
                               >
                                 <div className="min-w-0">
-                                  <div className="font-bold text-foreground truncate">{c.name}</div>
+                                  <div className="font-bold text-foreground truncate">{c.name || "Customer"}</div>
                                   <div className="text-[11px] text-muted-foreground font-mono truncate">
-                                    ID: {c.phone} {c.address ? `· ${c.address}` : ""}
+                                    {c.phone ? `ID: ${c.phone}` : "No ID"} {c.address ? `· ${c.address}` : ""}
                                   </div>
                                 </div>
                                 {dues > 0 ? (
                                   <span className="text-[10px] font-bold font-mono text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20 shrink-0">
-                                    Due: ₹{dues.toLocaleString("en-IN")}
+                                    Due: ₹{(Number(dues) || 0).toLocaleString("en-IN")}
                                   </span>
                                 ) : (
                                   <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 shrink-0">
@@ -313,24 +345,24 @@ export function PaymentReceives({ payments, deleteLogs, onAddPayment, onDeletePa
                           <div className="px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
                             Matching Customer IDs ({phoneSuggestions.length})
                           </div>
-                          {phoneSuggestions.map((c: any) => {
-                            const dues = store.getCustomerOutstandingDues(c.phone)
+                          {phoneSuggestions.map((c: any, idx: number) => {
+                            const dues = store?.getCustomerOutstandingDues && c.phone ? store.getCustomerOutstandingDues(c.phone) : 0
                             return (
                               <button
-                                key={`phone_sugg_${c.phone}`}
+                                key={`phone_sugg_${c.phone || c.name || idx}`}
                                 type="button"
                                 onMouseDown={() => handleSelectCustomer(c)}
                                 className="w-full text-left px-3 py-2 text-xs hover:bg-muted/80 transition-colors flex items-center justify-between gap-2"
                               >
                                 <div className="min-w-0">
-                                  <div className="font-bold font-mono text-primary truncate">{c.phone}</div>
+                                  <div className="font-bold font-mono text-primary truncate">{c.phone || "No ID"}</div>
                                   <div className="text-[11px] text-foreground font-semibold truncate">
-                                    {c.name} {c.address ? `· ${c.address}` : ""}
+                                    {c.name || "Customer"} {c.address ? `· ${c.address}` : ""}
                                   </div>
                                 </div>
                                 {dues > 0 ? (
                                   <span className="text-[10px] font-bold font-mono text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20 shrink-0">
-                                    Due: ₹{dues.toLocaleString("en-IN")}
+                                    Due: ₹{(Number(dues) || 0).toLocaleString("en-IN")}
                                   </span>
                                 ) : (
                                   <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 shrink-0">
@@ -490,7 +522,7 @@ export function PaymentReceives({ payments, deleteLogs, onAddPayment, onDeletePa
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                  <span className="font-semibold text-accent">Rs. {p.amount.toLocaleString("en-IN")}</span>
+                  <span className="font-semibold text-accent">Rs. {(Number(p.amount) || 0).toLocaleString("en-IN")}</span>
                   <span>via {p.mode}</span>
                   {p.address && <span>| {p.address}</span>}
                   {p.note && <span>| {p.note}</span>}
