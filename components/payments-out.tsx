@@ -35,6 +35,7 @@ interface PaymentsOutProps {
   paymentOutRefs?: Record<string, HTMLDivElement | null>
   dateFilter?: string
   readOnly?: boolean
+  onCustomerClick?: (identifier: string) => void
 }
 
 function formatTime(iso?: string | null) {
@@ -63,7 +64,7 @@ function isToday(value?: string | null) {
   return isTodayIST(value)
 }
 
-export function PaymentsOut({ paymentsOut = [], deleteLogs = [], onAddPaymentOut, onDeletePaymentOut, paymentOutRefs, dateFilter, readOnly = false }: PaymentsOutProps) {
+export function PaymentsOut({ paymentsOut = [], deleteLogs = [], onAddPaymentOut, onDeletePaymentOut, paymentOutRefs, dateFilter, readOnly = false, onCustomerClick }: PaymentsOutProps) {
   const [mounted, setMounted] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -209,10 +210,22 @@ export function PaymentsOut({ paymentsOut = [], deleteLogs = [], onAddPaymentOut
                   <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
                     Voucher #{p.voucherNo}
                   </span>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
-                    <Truck className="h-3 w-3" />
-                    {p.truckNo}
-                  </span>
+                  {p.supplierName && (
+                    <button
+                      type="button"
+                      onClick={() => { if (p.supplierName) onCustomerClick?.(p.supplierName) }}
+                      className="text-xs font-semibold text-foreground hover:text-primary hover:underline cursor-pointer transition-colors"
+                      title="View profile in CRM"
+                    >
+                      {p.supplierName}
+                    </button>
+                  )}
+                  {p.truckNo && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
+                      <Truck className="h-3 w-3" />
+                      {p.truckNo}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                   <span className="font-semibold text-destructive">Rs. {p.amount.toLocaleString("en-IN")}</span>

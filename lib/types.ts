@@ -52,6 +52,7 @@ export interface PaymentOut {
   mode: "NEFT" | "CASH" | "CHEQUE" | "UPI"
   note: string
   createdAt: string // ISO with seconds
+  supplierName?: string
 }
 
 export interface OrderItem {

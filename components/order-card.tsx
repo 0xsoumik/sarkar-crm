@@ -306,7 +306,7 @@ export function OrderCard({ order, vans, onUpdate, onSoftDelete, onAddTrip, onDe
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  onCustomerClick?.(order.phone)
+                  onCustomerClick?.(order.phone || order.name)
                 }}
                 className="text-xs font-extrabold tracking-tight text-foreground hover:text-primary hover:underline cursor-pointer transition-colors"
                 title="View customer profile"

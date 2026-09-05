@@ -521,7 +521,7 @@ export function PaymentReceives({ payments = [], deleteLogs = [], onAddPayment, 
                     Receipt #{p.receiptNo}
                   </span>
                   <button
-                    onClick={() => onCustomerClick?.(p.phone)}
+                    onClick={() => onCustomerClick?.(p.phone || p.name)}
                     className="text-xs font-semibold text-foreground hover:text-primary hover:underline cursor-pointer transition-colors"
                     title="View customer profile"
                   >

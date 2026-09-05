@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useStore } from "@/hooks/use-store"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -40,6 +40,7 @@ interface CRMProps {
   onAddPayment?: (payment: any) => void
   onUpdateOrder?: (orderId: string, updates: Partial<Order>) => void
   vans?: any[]
+  initialCustomerPhone?: string | null
 }
 
 type SortKey = "recent" | "dues" | "payments" | "orders"
@@ -52,7 +53,7 @@ function paymentSparkline(payments?: Payment[]): { v: number }[] {
   return sorted.slice(-8).map(p => ({ v: Math.round(((Number(p.amount) || 0) / max) * 100) }))
 }
 
-export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, onAddPayment, onUpdateOrder, vans = [] }: CRMProps) {
+export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, onAddPayment, onUpdateOrder, vans = [], initialCustomerPhone }: CRMProps) {
   const store = useStore()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null)
@@ -74,16 +75,50 @@ export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, on
       orders: Order[]; payments: Payment[]
     }>()
 
-    orders.forEach(order => {
-      if (!order.deleted && order.phone) {
-        if (!map.has(order.phone)) {
-          map.set(order.phone, {
-            phone: order.phone, name: order.name, address: order.address,
-            totalOrders: 0, totalPaid: 0, totalBilled: 0, pendingAmount: 0, unpricedCount: 0,
-            lastOrderDate: null, orders: [], payments: [],
-          })
+    const getOrCreate = (phone?: string, name?: string, address?: string) => {
+      const p = phone?.trim() || ""
+      const n = name?.trim() || "Customer"
+      let existingKey: string | null = null
+
+      if (p && map.has(p)) {
+        existingKey = p
+      } else {
+        for (const [key, entry] of map.entries()) {
+          if ((p && entry.phone === p) || (n && entry.name.toLowerCase() === n.toLowerCase())) {
+            existingKey = key
+            break
+          }
         }
-        const c = map.get(order.phone)!
+      }
+
+      if (existingKey) {
+        const entry = map.get(existingKey)!
+        if (!entry.phone && p) entry.phone = p
+        if (!entry.address && address) entry.address = address
+        return entry
+      }
+
+      const key = p || n
+      const newEntry = {
+        phone: p,
+        name: n,
+        address: address || "",
+        totalOrders: 0,
+        totalPaid: 0,
+        totalBilled: 0,
+        pendingAmount: 0,
+        unpricedCount: 0,
+        lastOrderDate: null as string | null,
+        orders: [] as Order[],
+        payments: [] as Payment[],
+      }
+      map.set(key, newEntry)
+      return newEntry
+    }
+
+    orders.forEach(order => {
+      if (!order.deleted && (order.phone || order.name)) {
+        const c = getOrCreate(order.phone, order.name, order.address)
         c.totalOrders++
         c.orders.push(order)
         let orderAmt = 0
@@ -102,20 +137,22 @@ export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, on
     })
 
     payments.forEach(payment => {
-      if (!payment.phone) return
-      if (!map.has(payment.phone)) {
-        map.set(payment.phone, {
-          phone: payment.phone, name: payment.name, address: payment.address,
-          totalOrders: 0, totalPaid: 0, totalBilled: 0, pendingAmount: 0, unpricedCount: 0,
-          lastOrderDate: null, orders: [], payments: [],
-        })
-      }
-      const c = map.get(payment.phone)!
+      if (!payment.phone && !payment.name) return
+      const c = getOrCreate(payment.phone, payment.name, payment.address)
       if (!payment.deleted) {
-        c.totalPaid += payment.amount
+        c.totalPaid += Number(payment.amount) || 0
       }
       c.payments.push(payment)
     })
+
+    // Also populate all known customers from database / logs
+    if (store?.getAllCustomers) {
+      try {
+        store.getAllCustomers().forEach(cust => {
+          getOrCreate(cust.phone, cust.name, cust.address)
+        })
+      } catch {}
+    }
 
     // Compute net outstanding due accurately
     map.forEach(c => {
@@ -123,7 +160,7 @@ export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, on
     })
 
     return map
-  }, [orders, payments])
+  }, [orders, payments, store])
 
   const customerList = useMemo(() => {
     return Array.from(customerMap.values()).sort((a, b) => {
@@ -136,6 +173,23 @@ export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, on
     })
   }, [customerMap, sortBy])
 
+  // Pre-select customer when navigating from another section (order card, payment, etc.)
+  useEffect(() => {
+    if (initialCustomerPhone) {
+      const q = initialCustomerPhone.trim().toLowerCase()
+      const match = customerList.find(
+        c => (c.phone && c.phone === initialCustomerPhone) ||
+             (c.name && c.name.toLowerCase() === q)
+      )
+      if (match) {
+        setSelectedCustomer(match.phone || match.name)
+      } else {
+        setSelectedCustomer(initialCustomerPhone)
+      }
+      setSearchTerm("")
+    }
+  }, [initialCustomerPhone, customerList])
+
   const filteredCustomers = useMemo(() => customerList.filter(c => {
     const q = searchTerm.toLowerCase()
     const matchesSearch = !q || c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.address.toLowerCase().includes(q)
@@ -143,7 +197,18 @@ export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, on
     return matchesSearch && matchesDues
   }), [customerList, searchTerm, filterByDues])
 
-  const selectedData = selectedCustomer ? customerMap.get(selectedCustomer) : (customerList[0] || null)
+  const selectedData = useMemo(() => {
+    if (selectedCustomer) {
+      if (customerMap.has(selectedCustomer)) return customerMap.get(selectedCustomer)!
+      const q = selectedCustomer.toLowerCase()
+      const match = customerList.find(
+        c => (c.phone && c.phone === selectedCustomer) ||
+             (c.name && c.name.toLowerCase() === q)
+      )
+      if (match) return match
+    }
+    return customerList[0] || null
+  }, [selectedCustomer, customerMap, customerList])
 
   // ── Portfolio KPIs (top-level) ──
   const totalClients = customerList.length
@@ -322,14 +387,17 @@ export function CRMPanel({ orders = [], payments = [], customers, onAddOrder, on
               </div>
             ) : (
               filteredCustomers.map(customer => {
-                const isSelected = selectedData?.phone === customer.phone
+                const isSelected = selectedData && (
+                  (selectedData.phone && customer.phone && selectedData.phone === customer.phone) ||
+                  (selectedData.name && customer.name && selectedData.name.toLowerCase() === customer.name.toLowerCase())
+                )
                 const ratio = customer.totalPaid > 0 && (customer.totalPaid + customer.pendingAmount) > 0
                   ? (customer.totalPaid / (customer.totalPaid + customer.pendingAmount)) * 100
                   : 0
                 return (
                   <button
                     key={customer.phone || customer.name}
-                    onClick={() => setSelectedCustomer(customer.phone)}
+                    onClick={() => setSelectedCustomer(customer.phone || customer.name)}
                     className={`w-full text-left p-3 rounded-xl border transition-all flex items-start gap-3 ${
                       isSelected
                         ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/20"

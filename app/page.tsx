@@ -89,6 +89,7 @@ export default function Page() {
   const [deleteLogCollapsed, setDeleteLogCollapsed] = useState(false)
   const [activityLogCollapsed, setActivityLogCollapsed] = useState(false)
   const [mapVisible, setMapVisible] = useState(true)
+  const [selectedCrmCustomer, setSelectedCrmCustomer] = useState<string | null>(null)
 
   const orderRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const paymentRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -239,12 +240,10 @@ export default function Page() {
     )
   }
 
-  const handleCustomerClick = (phone: string) => {
-    const profile = store.getCustomerProfile(phone)
-    if (profile) {
-      setSelectedCustomerProfile(profile)
-      setProfileOpen(true)
-    }
+  const handleCustomerClick = (identifier: string) => {
+    if (!identifier) return
+    setSelectedCrmCustomer(identifier)
+    setActiveAppTab("crm")
   }
 
   const handleActivityNavigate = (type: string, id: string) => {
@@ -832,6 +831,7 @@ export default function Page() {
                         paymentOutRefs={paymentOutRefs.current}
                         dateFilter={selectedDate}
                         readOnly={!canEditCurrentSheet}
+                        onCustomerClick={handleCustomerClick}
                       />
                     </div>
                     
@@ -914,6 +914,7 @@ export default function Page() {
                 onAddPayment={store.addPayment}
                 onUpdateOrder={store.updateOrder}
                 vans={store.vans}
+                initialCustomerPhone={selectedCrmCustomer}
               />
             </div>
           )}
