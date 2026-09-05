@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, createContext, useContext } from "react"
 import type { Order, OrderItem, Van, Worker, Trip, Payment, PaymentOut, DeleteLog, ActivityLog, Customer, SKUItem } from "@/lib/types"
 import { getISTDateString } from "@/lib/validation"
 import { isSupabaseConfigured } from "@/lib/supabase"
@@ -230,7 +230,25 @@ function unpackOrdersData(parsed: any) {
   }
 }
 
-export function useStore() {
+// -----------------------------------------------------------
+// Shared Store Context — prevents multiple hook instances
+// from running separate state/cloud sync cycles.
+// Only page.tsx mounts <StoreProvider>; all child components
+// call useStore() which reads from context (shared instance).
+// -----------------------------------------------------------
+type StoreValue = ReturnType<typeof useStoreInternal>
+export const StoreContext = createContext<StoreValue | null>(null)
+
+export function useStore(): StoreValue {
+  const ctx = useContext(StoreContext)
+  // Fallback: if called outside StoreProvider (e.g. in a test or SSR), spin up own instance
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  if (!ctx) return useStoreInternal()
+  return ctx
+}
+
+// Exported so StoreProvider (in store-provider.tsx) can instantiate the real store
+export function useStoreInternal() {
   // Initialize with empty state - will be hydrated from localStorage
   const [orders, setOrders] = useState<Order[]>([])
   const [vans, setVans] = useState<Van[]>([])
