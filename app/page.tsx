@@ -43,6 +43,7 @@ import {
   ArrowDown,
   ArrowUp,
   Cloud,
+  Download,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -252,9 +253,9 @@ export default function Page() {
   }
 
   const filteredOrders = store.orders.filter((o) => {
-    if (activeFilterTab === "pending") return o.status === "pending" && !o.deleted
     const orderDate = o.createdAt ? getISTDateString(o.createdAt) : ""
     if (orderDate !== selectedDate) return false
+    if (activeFilterTab === "pending") return o.status === "pending" && !o.deleted
     if (activeFilterTab === "delivered") return o.status === "delivered" && !o.deleted
     return !o.deleted
   })
@@ -278,6 +279,26 @@ export default function Page() {
     // 4. Final: id (numeric collation)
     return dir * a.id.localeCompare(b.id, undefined, { numeric: true })
   })
+
+  const handleExportBackup = () => {
+    const backupData = {
+      schemaVersion: 2,
+      exportedAt: new Date().toISOString(),
+      orders: store.orders,
+      vans: store.vans,
+      payments: store.payments,
+      paymentsOut: store.paymentsOut,
+      deleteLogs: store.deleteLogs,
+      activityLogs: store.activityLogs,
+    }
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `sarkar_crm_backup_${getISTDateString()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <main className="h-screen max-h-screen overflow-hidden flex flex-col bg-background font-sans">
@@ -327,7 +348,17 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExportBackup}
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground border-border font-medium"
+              title="Download offline backup of all 45 orders and 22 payments (JSON)"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Backup</span>
+            </Button>
             {canEditCurrentSheet ? (
               <AddOrderModal vans={store.vans} onAdd={store.addOrder} open={addOrderOpen} onOpenChange={setAddOrderOpen} />
             ) : (
