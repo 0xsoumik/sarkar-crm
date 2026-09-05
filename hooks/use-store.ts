@@ -689,7 +689,10 @@ export function useStoreInternal() {
   // ---------- Trips ----------
   const addTrip = useCallback((orderId: string, trip: Omit<Trip, "id" | "slipNo">) => {
     const currentMaxSlipNo = orders.reduce(
-      (max, order) => Math.max(max, ...order.trips.map((existingTrip) => existingTrip.slipNo || 0)),
+      (max, order) => {
+        const tripSlipNos = (order.trips || []).map((existingTrip) => existingTrip.slipNo || 0)
+        return tripSlipNos.length > 0 ? Math.max(max, ...tripSlipNos) : max
+      },
       0,
     )
     const slipNo = Math.max(currentMaxSlipNo + 1, counters.nextSlipNo)
@@ -698,7 +701,8 @@ export function useStoreInternal() {
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id !== orderId) return o
-        const updatedTrips = [...o.trips, newTrip]
+        const safeTrips = o.trips || []
+        const updatedTrips = [...safeTrips, newTrip]
         const totalDelivered = updatedTrips.reduce((sum, t) => sum + t.quantity, 0)
         const shouldAutoComplete = o.originalTotalQty > 0 && totalDelivered >= o.originalTotalQty
         logActivity("add_trip", `Added trip slip #${slipNo} to Order #${o.orderNo}`, orderId, { slipNo, quantity: trip.quantity })
@@ -713,15 +717,16 @@ export function useStoreInternal() {
     setCounters((prev) => ({ ...prev, nextSlipNo: slipNo + 1 }))
     
     return newTrip
-  }, [counters, logActivity])
+  }, [orders, counters, logActivity])
 
   const deleteTrip = useCallback((orderId: string, tripId: string, reason: string) => {
     const now = new Date().toISOString()
     setOrders((prev) => prev.map((o) => {
       if (o.id === orderId) {
-        const trip = o.trips.find(t => t.id === tripId)
+        const safeTrips = o.trips || []
+        const trip = safeTrips.find(t => t.id === tripId)
         logActivity("delete_trip", `Deleted trip slip #${trip?.slipNo} from Order #${o.orderNo} - ${reason}`, orderId, { tripId, reason })
-        return { ...o, trips: o.trips.filter((t) => t.id !== tripId) }
+        return { ...o, trips: safeTrips.filter((t) => t.id !== tripId) }
       }
       return o
     }))

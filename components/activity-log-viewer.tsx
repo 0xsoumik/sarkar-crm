@@ -71,13 +71,19 @@ export function ActivityLogViewer({ logs, payments, paymentsOut, orders, onNavig
                 className="w-full text-left flex items-start gap-2 p-1 hover:bg-muted/50 rounded transition-colors"
               >
                 <div className="mt-1 flex-shrink-0">
-                  {ACTION_ICONS[log.action]}
+                  {ACTION_ICONS[log.action] ?? <Clock className="h-3.5 w-3.5 text-muted-foreground" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-medium text-foreground line-clamp-2">{log.label}</p>
                   <p className="text-[9px] text-muted-foreground mt-0.5 flex items-center gap-1">
                     <Clock className="h-2.5 w-2.5" />
-                    {new Date(log.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}
+                    {(() => {
+                      try {
+                        const d = new Date(log.timestamp)
+                        if (isNaN(d.getTime())) return "—"
+                        return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+                      } catch { return "—" }
+                    })()}
                   </p>
                 </div>
                 {navigableItems.length > 0 && (

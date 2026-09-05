@@ -23,9 +23,9 @@ export function DailySheetHistory({ orders, payments, paymentsOut }: DailySheetH
   const getDateKey = (isoString: string) => (isoString ? getISTDateString(isoString) : "")
 
   const allDates = new Set<string>()
-  orders.forEach((o) => allDates.add(getDateKey(o.createdAt)))
-  payments.forEach((p) => allDates.add(getDateKey(p.createdAt)))
-  paymentsOut.forEach((po) => allDates.add(getDateKey(po.createdAt)))
+  orders.forEach((o) => { const k = getDateKey(o.createdAt); if (k) allDates.add(k) })
+  payments.forEach((p) => { const k = getDateKey(p.createdAt); if (k) allDates.add(k) })
+  paymentsOut.forEach((po) => { const k = getDateKey(po.createdAt); if (k) allDates.add(k) })
 
   const sortedDates = Array.from(allDates).sort().reverse()
 
@@ -37,15 +37,20 @@ export function DailySheetHistory({ orders, payments, paymentsOut }: DailySheetH
   }
 
   const formatDateDisplay = (dateKey: string) => {
-    const today = getISTDateString()
-    const yesterdayDate = new Date()
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1)
-    const yesterday = getISTDateString(yesterdayDate)
+    try {
+      const today = getISTDateString()
+      const yesterdayDate = new Date()
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+      const yesterday = getISTDateString(yesterdayDate)
 
-    if (dateKey === today) return "Today"
-    if (dateKey === yesterday) return "Yesterday"
-    const date = new Date(dateKey + "T00:00:00Z")
-    return date.toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+      if (dateKey === today) return "Today"
+      if (dateKey === yesterday) return "Yesterday"
+      const date = new Date(dateKey + "T00:00:00Z")
+      if (isNaN(date.getTime())) return dateKey
+      return date.toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+    } catch {
+      return dateKey
+    }
   }
 
   const toggleDate = (dateKey: string) => {

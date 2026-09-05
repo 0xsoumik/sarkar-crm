@@ -318,7 +318,7 @@ export function AddOrderModal({ vans, onAdd, open: externalOpen, onOpenChange: e
                         <button
                           key={`phone_sugg_${c.phone || c.name || idx}`}
                           type="button"
-                          onClick={() => handlePhoneSelect(c)}
+                          onMouseDown={() => handlePhoneSelect(c)}
                           className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted"
                         >
                           <div className="font-semibold font-mono text-primary">{c.phone}</div>
@@ -392,7 +392,7 @@ export function AddOrderModal({ vans, onAdd, open: externalOpen, onOpenChange: e
                         <button
                           key={addr}
                           type="button"
-                          onClick={() => handleAddressSelect(addr)}
+                          onMouseDown={() => handleAddressSelect(addr)}
                           className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted border-b last:border-b-0"
                         >
                           {addr}
@@ -493,7 +493,7 @@ export function AddOrderModal({ vans, onAdd, open: externalOpen, onOpenChange: e
                                 <button
                                   key={sku.id}
                                   type="button"
-                                  onClick={() => handleSelectProductSku(item.id, sku)}
+                                  onMouseDown={() => handleSelectProductSku(item.id, sku)}
                                   className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-muted flex items-center justify-between"
                                 >
                                   <div>
